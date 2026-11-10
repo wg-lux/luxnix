@@ -128,33 +128,33 @@ def test_enrollment_publishes_only_allowlisted_center_salts(tmp_path, denied):
     # Execute the built enrollment script against a recording Vault CLI, never a server.
     recorder = tmp_path / "vault.py"
     recorder.write_text("""
-import json, os, sys
-from pathlib import Path
-path = Path(os.environ["RECORDING_VAULT"])
-state = (json.loads(path.read_text()) if path.exists() else
-         {"created": [], "policies": {}, "puts": []})
-args = sys.argv[1:]
-if args[:2] == ["secrets", "list"]:
-    print(json.dumps({"lx-hub-pki/": {}, "lx-hub-secrets/": {}}))
-elif args[:2] == ["auth", "list"]:
-    print(json.dumps({"approle/": {}}))
-elif args[:2] == ["kv", "get"]:
-    if os.environ["DENIED"] == "true":
-        print("permission denied", file=sys.stderr)
-        sys.exit(2)
-    if args[-1] not in state["created"]:
-        print("No value found at requested path", file=sys.stderr)
-        sys.exit(2)
-    print("existing-test-material")
-elif args[:2] == ["kv", "put"]:
-    assert "-cas=0" in args
-    assert len(sys.stdin.read().strip()) == 64
-    state["puts"].append(args[-2])
-    state["created"].append(args[-2])
-elif args[:2] == ["policy", "write"]:
-    state["policies"][args[2]] = Path(args[3]).read_text()
-path.write_text(json.dumps(state))
-""")
+        import json, os, sys
+        from pathlib import Path
+        path = Path(os.environ["RECORDING_VAULT"])
+        state = (json.loads(path.read_text()) if path.exists() else
+                {"created": [], "policies": {}, "puts": []})
+        args = sys.argv[1:]
+        if args[:2] == ["secrets", "list"]:
+            print(json.dumps({"lx-hub-pki/": {}, "lx-hub-secrets/": {}}))
+        elif args[:2] == ["auth", "list"]:
+            print(json.dumps({"approle/": {}}))
+        elif args[:2] == ["kv", "get"]:
+            if os.environ["DENIED"] == "true":
+                print("permission denied", file=sys.stderr)
+                sys.exit(2)
+            if args[-1] not in state["created"]:
+                print("No value found at requested path", file=sys.stderr)
+                sys.exit(2)
+            print("existing-test-material")
+        elif args[:2] == ["kv", "put"]:
+            assert "-cas=0" in args
+            assert len(sys.stdin.read().strip()) == 64
+            state["puts"].append(args[-2])
+            state["created"].append(args[-2])
+        elif args[:2] == ["policy", "write"]:
+            state["policies"][args[2]] = Path(args[3]).read_text()
+        path.write_text(json.dumps(state))
+    """)
     script = re.sub(r"(?<![\w/-])vault(?= )", f"{sys.executable} {recorder}", script)
     script = script.replace(
         "/var/lib/luxnix-vault-site-lifecycle", str(tmp_path / "lifecycle")

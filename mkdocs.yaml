@@ -101,6 +101,7 @@ nav:
       - gs-02 Local Redis Recovery: operations/gs-02-local-redis-broker.md
   - Vault:
       - Machine Setup Secrets Checklist: machine-secrets-checklist.md
+      - Encrypted Storage Map: boot-storage-map.md
       - Root Encryption Quick Steps: boot-storage-quickstart.md
       - RAM migration: migration-environment.md
       - Boot LUKS Storage Migration: boot-storage-migration.md

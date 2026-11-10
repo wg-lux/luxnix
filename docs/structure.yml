@@ -16,6 +16,9 @@ entrypoints:
 - name: credential-backup
   file: credential-backup.md
   purpose: Preserve admin/client credential sources in encrypted archives and renew recovery evidence after drift.
+- name: boot-storage-map
+  file: boot-storage-map.md
+  purpose: Overview of encrypted root storage workflows, disk states, lifecycle, activation guard, recovery paths and file locations.
 - name: boot-storage-quickstart
   file: boot-storage-quickstart.md
   purpose: Separate fresh installation, existing encrypted-storage inspection and preservation migration operator workflows.

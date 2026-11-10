@@ -707,8 +707,74 @@ def test_plaintext_journal_keeps_permissions_guard(tmp_path, monkeypatch):
         lambda p: pytest.fail("metadata needs no encryption"),
     )
     migration.private_path(path)
+    path.chmod(0o664)
+    with pytest.raises(migration.MigrationError, match="writable by group or others"):
+        migration.private_path(path)
+    assert path.stat().st_mode & 0o777 == 0o664
+
+
+def _trusted_parents(monkeypatch, path):
+    from types import SimpleNamespace
+
+    real_stat = Path.stat
+    monkeypatch.setattr(
+        Path,
+        "stat",
+        lambda p, **kw: (
+            SimpleNamespace(st_mode=real_stat(p, **kw).st_mode & ~0o022)
+            if p in path.parents
+            else real_stat(p, **kw)
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("directory", "mode", "expected"),
+    [(False, 0o644, 0o600), (False, 0o440, 0o400), (True, 0o755, 0o700)],
+)
+def test_private_path_tightens_read_only_exposure(
+    tmp_path, monkeypatch, capsys, directory, mode, expected
+):
+    path = tmp_path / "state"
+    path.mkdir() if directory else path.write_text("{}")
+    path.chmod(mode)
+    _trusted_parents(monkeypatch, path)
+
+    migration.private_path(path, directory=directory)
+    assert path.stat().st_mode & 0o777 == expected
+    assert f"Restricted {path}" in capsys.readouterr().err
+
+    migration.private_path(path, directory=directory)
+    assert capsys.readouterr().err == ""
+
+
+def test_private_path_refuses_foreign_owner_without_changes(tmp_path, monkeypatch):
+    path = tmp_path / "progress.json"
+    path.write_text("{}")
     path.chmod(0o644)
-    with pytest.raises(migration.MigrationError, match="private"):
+    _trusted_parents(monkeypatch, path)
+    monkeypatch.setattr(migration.os, "geteuid", lambda: os.getuid() + 1)
+
+    with pytest.raises(migration.MigrationError, match=f"{path} is owned by uid"):
+        migration.private_path(path)
+    assert path.stat().st_mode & 0o777 == 0o644
+
+
+def test_private_path_names_writable_parent(tmp_path):
+    path = tmp_path / "plan.json"
+    path.write_text("{}")
+    with pytest.raises(migration.MigrationError, match="writable by group or others"):
+        migration.private_path(path)
+
+
+def test_private_path_reports_filesystem_without_permissions(tmp_path, monkeypatch):
+    path = tmp_path / "plan.json"
+    path.write_text("{}")
+    path.chmod(0o644)
+    _trusted_parents(monkeypatch, path)
+    monkeypatch.setattr(migration.os, "fchmod", lambda fd, mode: None)
+
+    with pytest.raises(migration.MigrationError, match="does not store permissions"):
         migration.private_path(path)
 
 

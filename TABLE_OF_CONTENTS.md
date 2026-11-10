@@ -45,6 +45,7 @@
   - [gs-02 Local Redis Recovery](docs/operations/gs-02-local-redis-broker.md)
 - **Vault**
   - [Machine Setup Secrets Checklist](docs/machine-secrets-checklist.md)
+  - [Encrypted Storage Map](docs/boot-storage-map.md)
   - [Root Encryption Quick Steps](docs/boot-storage-quickstart.md)
   - [RAM migration](docs/migration-environment.md)
   - [Boot LUKS Storage Migration](docs/boot-storage-migration.md)

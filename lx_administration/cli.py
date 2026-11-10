@@ -24,9 +24,15 @@ Inside the devenv shell run `luxnix ...`; from outside, `devenv shell luxnix ...
 # What each command changes, shown before it runs.
 EFFECTS = {
     "prepare": "Writes the plan to recovery media; no disk changes. Safe to repeat.",
-    "status": "Reads saved migration state only; no changes. Safe to repeat.",
+    "status": (
+        "Reads saved migration state; only tightens permissions of its own state "
+        "files. Safe to repeat."
+    ),
     "migrate": "Guides each step and asks before any disk change. Safe to rerun; it resumes.",
-    "verify": "Reads the disk against the saved plan; no changes. Safe to repeat.",
+    "verify": (
+        "Reads the disk against the saved plan; only tightens permissions of its "
+        "own state files. Safe to repeat."
+    ),
     "recover": "Read-only without --assessor; with --assessor --apply it accepts the existing layout and never formats.",
 }
 

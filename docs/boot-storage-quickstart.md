@@ -6,7 +6,8 @@ Fresh LUKS2 installation is the default for new machines. Run
 installer preparation. The
 [current contract](https://github.com/wg-lux/luxnix/blob/main/boot-storage.yml)
 is the single requirements source. Existing machines are never automatically
-reclassified as disposable.
+reclassified as disposable. For an overview of how the parts fit together, see
+the [encrypted storage map](boot-storage-map.md).
 
 | Machine | Command | Purpose |
 | --- | --- | --- |

@@ -134,18 +134,60 @@ def exact_keys(value: dict, keys: set[str], name: str) -> None:
 
 
 def private_path(path: Path, *, directory: bool = False) -> None:
+    """Require an operator-owned private path; tighten read-only exposure in place.
+
+    Group or other read/execute bits are removed, because that only narrows access.
+    Write access by others, foreign ownership and writable parents are refused:
+    another user could have changed the content, so it needs human review.
+    """
     if not path.is_absolute() or path.resolve() != path:
-        raise MigrationError("Use an absolute private path without symbolic links")
+        raise MigrationError(
+            f"Use an absolute private path without symbolic links: {path}"
+        )
     for parent in path.parents:
         if parent.stat().st_mode & 0o022:
-            raise MigrationError("Evidence path has a parent writable by another user")
+            raise MigrationError(
+                f"{parent} is writable by group or others, so {path} cannot be "
+                "trusted. Restrict it (chmod go-w) or move the state elsewhere"
+            )
     info = path.lstat()
     kind = stat.S_ISDIR if directory else stat.S_ISREG
-    if not kind(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+    if not kind(info.st_mode):
         raise MigrationError(
-            "Evidence and state must belong to the current operator and be "
-            "private (0700 directories, 0600 files)"
+            f"{path} must be a {'directory' if directory else 'regular file'}"
         )
+    if info.st_uid != os.geteuid():
+        raise MigrationError(
+            f"{path} is owned by uid {info.st_uid}, not the current operator "
+            f"(uid {os.geteuid()}). It was probably created as another user, for "
+            "example with sudo. Confirm its content is yours before changing its "
+            "owner; on FAT/exFAT media ownership cannot be stored at all"
+        )
+    mode = stat.S_IMODE(info.st_mode)
+    if mode & 0o022:
+        raise MigrationError(
+            f"{path} is writable by group or others (mode {mode:04o}), so another "
+            "user may have changed it. Review its content, then run: "
+            f"chmod go-rwx {path}"
+        )
+    if mode & 0o077:
+        tightened = mode & ~0o077
+        flags = os.O_RDONLY | os.O_NOFOLLOW | (os.O_DIRECTORY if directory else 0)
+        fd = os.open(path, flags)
+        try:
+            opened = os.fstat(fd)
+            if (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino):
+                raise MigrationError(f"{path} changed while it was being checked")
+            os.fchmod(fd, tightened)
+            if stat.S_IMODE(os.fstat(fd).st_mode) & 0o077:
+                raise MigrationError(
+                    f"{path} cannot be made private: its filesystem does not store "
+                    "permissions (for example FAT or exFAT). Use ext4, XFS or Btrfs "
+                    "recovery media"
+                )
+        finally:
+            os.close(fd)
+        print(f"Restricted {path} from {mode:04o} to {tightened:04o}", file=sys.stderr)
 
 
 @contextmanager
