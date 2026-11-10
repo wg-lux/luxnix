@@ -53,7 +53,7 @@ argv = json.loads(sys.argv[2])
 os.execvp(argv[0], argv)
 '''
 SUDO_SUPERVISOR = r'''
-import json, os, subprocess, sys, threading
+import ctypes, json, os, subprocess, sys, threading
 password = sys.stdin.buffer.readline(4097)
 if not password.endswith(b'\n') or len(password) > 4096:
     sys.exit(2)
@@ -69,12 +69,18 @@ try:
     ready = b'LUXNIX-PRIVILEGE-READY\n'
     if child.stdout.read(len(ready)) != ready:
         sys.exit(child.wait() or 1)
+    # PR_SET_DUMPABLE: protect credential memory even with a piped core handler.
+    # The child has already opened its pipe through /proc before this barrier.
+    if ctypes.CDLL(None).prctl(4, 0, 0, 0, 0) != 0:
+        raise RuntimeError('Cannot disable credential supervisor dumps')
     sys.stdout.buffer.write(ready)
     sys.stdout.buffer.flush()
     def send():
         try:
             with os.fdopen(write_fd, 'wb', buffering=0) as output:
-                while data := sys.stdin.buffer.read(65536):
+                # A short command can exit while stdin is still open (SSH).
+                # Never leave a daemon holding Python's buffered stdin lock.
+                while data := os.read(sys.stdin.fileno(), 65536):
                     output.write(data)
         except BrokenPipeError:
             pass

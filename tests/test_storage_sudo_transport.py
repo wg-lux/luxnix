@@ -64,6 +64,10 @@ def test_stream_api_is_ready_before_caller_sends_payload(target):
     remote, root = target
     process = remote.open_stream([sys.executable, '-c', 'import sys; print(len(sys.stdin.buffer.read()))'])
     assert (root / 'auth').read_bytes() == b'correct-password\n'
+    if os.geteuid() != 0:
+        # Kernel protection is active before the caller releases any payload.
+        with pytest.raises(PermissionError):
+            os.close(os.open(f'/proc/{process.pid}/mem', os.O_RDONLY))
     stdout, _ = process.communicate(b'payload', timeout=5)
     assert process.returncode == 0 and stdout.strip() == b'7'
 
@@ -74,3 +78,22 @@ def test_multiline_password_refused_before_sudo(target):
     with pytest.raises(provision.ProvisionError, match='exactly one'):
         remote.call(['true'], b'payload', privileged=True)
     assert not (root / 'auth').exists()
+
+
+@pytest.mark.parametrize('password_required', [False, True])
+def test_short_command_exits_cleanly_while_payload_channel_remains_open(
+    target, password_required
+):
+    remote, _ = target
+    remote.password_required = password_required
+    process = remote.open_stream([sys.executable, '-c', 'print("completed")'])
+    try:
+        # SSH can keep this channel open after the elevated command exits.
+        assert process.wait(timeout=10) == 0
+        assert process.stdout.read() == b'completed\n'
+        assert b'Fatal Python error' not in process.stderr.read()
+    finally:
+        process.stdin.close()
+        if process.poll() is None:
+            process.kill()
+            process.wait()

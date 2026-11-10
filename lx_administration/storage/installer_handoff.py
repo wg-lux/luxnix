@@ -23,6 +23,10 @@ from lx_administration.storage import recovery_media
 
 SPEC = Path("/etc/luxnix/migration.json")
 SESSION = "luxnix-migration"
+HOLD_WINDOW = (
+    '"$@"; status=$?; printf "\\nluxnix-migration ended with exit status %s. '
+    'Press Enter to close this window.\\n" "$status"; read -r _'
+)
 
 
 def image_host() -> str:
@@ -99,6 +103,11 @@ def detach_from_ssh(argv: list[str]) -> None:
             SESSION,
             "-e",
             f"PYTHONPATH={os.environ.get('PYTHONPATH', '')}",
+            # Keep the window open afterwards, so results and errors stay readable.
+            "sh",
+            "-c",
+            HOLD_WINDOW,
+            "sh",
             sys.executable,
             "-m",
             "lx_administration.storage.installer_handoff",

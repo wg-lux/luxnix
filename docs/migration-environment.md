@@ -162,7 +162,8 @@ The environment keeps the conversion running safely:
 - Conversion starts on mains power; on battery alone it asks to connect power.
 - Sleep and hibernation are disabled, and the lid, suspend key and idle are ignored.
 - Over SSH it runs in the tmux session `luxnix-migration`. After a dropped
-  connection, run the same command to return to it.
+  connection, run the same command to return to it. When the workflow ends, the
+  window shows its result and closes after you press Enter.
 - One workflow runs at a time.
 
 Just before the first disk write, the boot default moves to the migration entry

@@ -164,6 +164,8 @@ def test_ssh_sessions_continue_inside_tmux(monkeypatch):
     # -A reattaches to a running session instead of starting a second workflow.
     assert args[:5] == ["tmux", "new-session", "-A", "-s", "luxnix-migration"]
     assert args[5:7] == ["-e", "PYTHONPATH=/nix/store/runtime"]
+    # The window stays open after the workflow, so its output can be read.
+    assert args[7:11] == ["sh", "-c", handoff.HOLD_WINDOW, "sh"]
     assert args[-4:] == [
         "-m",
         "lx_administration.storage.installer_handoff",
@@ -195,3 +197,20 @@ def test_launcher_detaches_only_after_the_source_is_verified(ram, monkeypatch):
     )
     with pytest.raises(SystemExit, match="does not match the plan"):
         handoff.main(["run"])
+
+
+def test_the_window_shows_the_result_and_waits_for_enter():
+    import subprocess
+
+    result = subprocess.run(
+        [
+            *("sh", "-c", handoff.HOLD_WINDOW, "sh"),
+            *("sh", "-c", "echo plan stopped; exit 3"),
+        ],
+        input="\n",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "plan stopped" in result.stdout
+    assert "ended with exit status 3. Press Enter" in result.stdout
