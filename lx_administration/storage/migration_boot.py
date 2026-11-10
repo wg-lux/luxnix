@@ -253,18 +253,78 @@ def block_nodes(nodes):
         yield from block_nodes(node.get("children", []))
 
 
+SETTINGS_FILE = "migration-settings.yml"
+
+
+def plan_settings(host: str) -> Path:
+    """Settings live beside the plan that devenv shell luxnix migrate saved."""
+    from lx_administration.storage import recovery_media
+
+    return recovery_media.STATE_ROOT / host / SETTINGS_FILE
+
+
+def default_settings(args, host: dict) -> Path:
+    """Use the plan's settings, discovering and saving them on first use."""
+    path = plan_settings(args.host)
+    if path.exists():
+        print(f"Using settings saved with the plan: {path}", file=sys.stderr)
+        return path
+    import yaml
+
+    values = observe_settings(args, args.host, host)
+    session = os.environ.get("SSH_CONNECTION", "").split()
+    if not values["controller_cidr"] and session:
+        # The controller is the machine this SSH session comes from, but only on
+        # the management network: the RAM environment has no VPN.
+        client = ipaddress.IPv4Address(session[0])
+        if client not in ipaddress.IPv4Interface(values["address"]).network:
+            raise ValueError(
+                f"This SSH session comes from {client}, outside the management "
+                f"network {values['address']}; the RAM environment cannot reach it. "
+                "Add --controller-cidr <controller wired ip>/32"
+            )
+        values["controller_cidr"] = f"{client}/32"
+    if not values["controller_cidr"]:
+        raise ValueError(
+            "Set the controller address: add --controller-cidr <ip>/32, or run "
+            "this over SSH from the controller on the management network"
+        )
+    text = yaml.safe_dump(values, sort_keys=False)
+    if path.parent.is_dir():
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w") as stream:
+            stream.write(text)
+        print(f"Saved these settings with the plan: {path}", file=sys.stderr)
+    else:
+        path = Path(tempfile.mkdtemp(prefix="luxnix-settings-")) / SETTINGS_FILE
+        path.write_text(text)
+        print("No saved plan on /recovery; using these settings once.", file=sys.stderr)
+    print(text, end="", file=sys.stderr)
+    return path
+
+
 def build_settings(args, host):
     """Read data only; settings cannot select code, signing or output paths."""
     from lx_administration.yaml import load_unique_yaml_file
 
+    if not args.settings:
+        args.settings = default_settings(args, host)
     if args.settings:
         values = load_unique_yaml_file(args.settings)
-        if not isinstance(values, dict) or set(values) != {
-            "host",
-            "hardware_uuid",
-            *BUILD_SETTINGS,
-        }:
-            raise ValueError("Unexpected build settings fields")
+        if values is None:
+            raise ValueError(
+                f"{args.settings} is empty. Rerun without --settings: the settings "
+                "are discovered and saved with the plan"
+            )
+        expected = {"host", "hardware_uuid", *BUILD_SETTINGS}
+        if not isinstance(values, dict) or set(values) != expected:
+            found = set(values) if isinstance(values, dict) else set()
+            raise ValueError(
+                f"{args.settings} does not match this version: unexpected "
+                f"{sorted(found - expected) or 'none'}, missing "
+                f"{sorted(expected - found) or 'none'}. Move it aside and rerun "
+                "without --settings to rediscover"
+            )
         if (values["host"], values["hardware_uuid"]) != (
             args.host,
             host["hardware_uuid"].lower(),
@@ -293,11 +353,39 @@ def discover(args):
     import yaml
 
     host_name = socket.gethostname().split(".")[0]
-    if args.host is not None and args.host != host_name:
-        raise ValueError("Run discovery on the selected host, not its controller")
     host = load_unique_yaml_file(args.flake / "autoconf/config.yml")["boot_storage"][
         "hosts"
     ][host_name]
+    values = observe_settings(args, args.host or host_name, host)
+    if args.format == "command":
+        if not args.controller_cidr:
+            raise ValueError("--format command requires --controller-cidr")
+        command = [
+            "devenv",
+            "shell",
+            "migration-boot",
+            "build",
+            host_name,
+            "--flake",
+            str(args.flake.resolve()),
+        ]
+        for name in BUILD_SETTINGS:
+            if values[name] is not None:
+                command.extend(["--" + name.replace("_", "-"), values[name]])
+        command.extend(
+            ["--output", str(args.output or Path.home() / f"migration-{host_name}")]
+        )
+        print(shlex.join(command))
+    else:
+        print(yaml.safe_dump(values, sort_keys=False), end="")
+
+
+def observe_settings(args, selected: str, host: dict) -> dict:
+    """Read the network and recovery drive of this host; changes nothing."""
+    host_name = socket.gethostname().split(".")[0]
+    if selected != host_name:
+        raise ValueError("Run discovery on the selected host, not its controller")
+    recovery = getattr(args, "recovery", None) or Path("/recovery")
     routes = json.loads(sb.run("ip", "-json", "-4", "route", "show", "default"))
     if args.interface:
         routes = [r for r in routes if r.get("dev") == args.interface]
@@ -322,7 +410,7 @@ def discover(args):
             "findmnt",
             "--json",
             "--mountpoint",
-            args.recovery,
+            recovery,
             "--output",
             "SOURCE,UUID,FSTYPE,FSROOT",
         )
@@ -375,27 +463,7 @@ def discover(args):
             "before building.",
             file=sys.stderr,
         )
-    if args.format == "command":
-        if not args.controller_cidr:
-            raise ValueError("--format command requires --controller-cidr")
-        command = [
-            "devenv",
-            "shell",
-            "migration-boot",
-            "build",
-            host_name,
-            "--flake",
-            str(args.flake.resolve()),
-        ]
-        for name in BUILD_SETTINGS:
-            if values[name] is not None:
-                command.extend(["--" + name.replace("_", "-"), values[name]])
-        command.extend(
-            ["--output", str(args.output or Path.home() / f"migration-{host_name}")]
-        )
-        print(shlex.join(command))
-    else:
-        print(yaml.safe_dump(values, sort_keys=False), end="")
+    return values
 
 
 def reviewed_spec(args, root: Path, boot_trust: str, console: str) -> dict:
@@ -622,11 +690,26 @@ def hand_over_boot(root: Path, esp: Path, closure: str) -> str:
     return entry
 
 
+def hardware_uuid() -> str:
+    """The firmware UUID; the file is root-only, so an operator reads it via sudo."""
+    path = Path("/sys/class/dmi/id/product_uuid")
+    try:
+        return path.read_text().strip().lower()
+    except PermissionError:
+        result = subprocess.run(
+            ["sudo", "--", store_tool("cat"), str(path)],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+        )
+        return result.stdout.strip().lower()
+
+
 def require_machine(spec: dict, host: str, certificate: Path) -> None:
     validate_spec(spec)
     if spec["host"] != host:
         raise ValueError("Signed image is for another inventory host")
-    actual = Path("/sys/class/dmi/id/product_uuid").read_text().strip().lower()
+    actual = hardware_uuid()
     if actual != spec["hardware_uuid"]:
         raise ValueError("Signed image is for another physical machine")
     if spec.get("boot_trust", "secure-boot") == "secure-boot":
@@ -940,9 +1023,16 @@ def newc(entries: list[tuple[str, int, bytes | None]]) -> bytes:
 def store_tool(name: str) -> str:
     found = shutil.which(name)
     real = os.path.realpath(found) if found else ""
-    if not real.startswith(("/nix/store/", "/run/current-system/")):
+    # Keep argv[0] for multicall tools (cat -> coreutils), but resolve their
+    # containing directory so sudo never executes a mutable PATH entry.
+    executable = (
+        os.path.join(os.path.realpath(os.path.dirname(found)), os.path.basename(found))
+        if found
+        else ""
+    )
+    if not real.startswith("/nix/store/") or not executable.startswith("/nix/store/"):
         raise ValueError(f"{name} from the Nix store is required; use the devenv shell")
-    return real
+    return executable
 
 
 def as_root(*command: str) -> None:
@@ -962,9 +1052,10 @@ def kexec_bundle(args, host: str) -> tuple[Path, dict]:
         bundle = build_attribute(root, spec, "kexecBundle")
         if json.loads((bundle / "manifest.json").read_text()) != spec:
             raise ValueError("Built RAM environment differs from the reviewed inputs")
-        if sb.reviewed_source(root, root / "ansible/inventory/hosts.ini") != spec[
-            "revision"
-        ]:
+        if (
+            sb.reviewed_source(root, root / "ansible/inventory/hosts.ini")
+            != spec["revision"]
+        ):
             raise ValueError("Source changed during the build")
     validate_spec(spec)
     if spec.get("boot_trust") != "host-kexec" or spec["host"] != host:
@@ -987,8 +1078,7 @@ def management_link(spec: dict) -> bytes:
         )
     address = (device / "address").read_text().strip()
     return (
-        f"[Match]\nPermanentMACAddress={address}\n\n"
-        f"[Link]\nName={spec['interface']}\n"
+        f"[Match]\nPermanentMACAddress={address}\n\n[Link]\nName={spec['interface']}\n"
     ).encode()
 
 

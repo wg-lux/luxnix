@@ -166,7 +166,7 @@ holds only storage tools, so it works whatever the state of application builds.
 | Recovery ISO | `lx_administration/storage/recovery-image.nix` |
 | Migration state and journals | `/recovery/luxnix-state/<host>/` |
 | Plan source for the RAM environment | `/recovery/luxnix-state/sources/<revision>/` |
-| Encrypted host backup | `/recovery/luxnix-backup-<host>.luks`, key in custody (`<custody>/<host>/host-backup.key`) |
+| Encrypted host backup | `/recovery/luxnix-backup-<host>.luks`, key in custody (`<custody>/host-backup-<host>.key`) |
 | LUKS header backup | `/recovery/luxnix-state/<host>/header-after-conversion-*/luks.header` |
 | Storage contract per generation | `/etc/luxnix/root-storage.json` |
 | Override and audit records | `/run/luxnix/root-guard-override.json`, `/var/lib/luxnix/root-guard-audit.jsonl` |

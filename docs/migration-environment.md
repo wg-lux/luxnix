@@ -14,7 +14,7 @@ There are two ways to start it. Choose by where you are:
 | How it starts | Reboot; the firmware takes the one-shot entry ([stage it first](#4-stage-then-arm)) | From the running host, without a reboot ([remote start](#start-without-a-reboot-remote)) |
 | The screen shows | Boot messages, then the approval prompt | Boot messages, then an access screen with the address and SSH fingerprint |
 | At the machine | Type `BOOT UNVERIFIED <host> <revision-prefix>`; a root shell opens on the screen | No login; the screen only shows how to connect |
-| Over SSH | Port 2222 after approval, when administrator keys are configured; check the fingerprint shown on the screen | Port 2222 with the `known_hosts` file written before the switch |
+| Over SSH | Port 2222 after approval, when administrator keys are configured; check the fingerprint shown on the screen | Port 2222 with the `known_hosts` file the `--apply` run wrote before switching |
 
 Connect from the controller (an address in `controller_cidr`) with:
 
@@ -60,22 +60,22 @@ so the cause can be found.
 
 ## 2. Settings file
 
-The settings file describes how the RAM environment reaches the network and finds
-the recovery drive. It is written only when you run `migration-boot discover`;
-`build` and `kexec` only read it. Create it on the **target host**, outside the
-checkout:
+The settings tell the RAM environment how to reach the network and find the
+recovery drive. They live with the plan, in
+`/recovery/luxnix-state/<host>/migration-settings.yml`, so `build` and `kexec`
+need no path:
 
-1. Mount the recovery drive at `/recovery` and connect the wired network the
-   RAM environment will use.
-2. Run discovery with your controller's address, as the target sees it:
+1. Run `devenv shell luxnix migrate` first, so the plan's state directory exists.
+2. Keep the recovery drive mounted at `/recovery` and the wired network connected.
+3. Run `build` or `kexec` on the **target host** without `--settings`. On first
+   use they discover the values below, save them with the plan (mode 0600) and
+   print them; later runs reuse that file.
 
-   ```sh
-   devenv shell migration-boot discover --controller-cidr <controller-ip>/32 \
-     > ~/migration-settings.yml
-   ```
-
-3. Review each value against the table below, then pass the file to `build` or
-   `kexec` with `--settings ~/migration-settings.yml`.
+The controller address comes from your SSH session when it arrives over the
+management network. Over a VPN or from the local console, add
+`--controller-cidr <controller wired ip>/32`; the RAM environment has no VPN.
+To start over, move the saved file aside and run again. `--settings <file>` uses
+another file, and a flag such as `--address` overrides one value for one run.
 
 | Key | Where discovery gets it | What to check |
 | --- | --- | --- |
@@ -88,21 +88,15 @@ checkout:
 | `recovery_uuid`, `recovery_fstype` | The filesystem mounted at `/recovery` (`--recovery` for another mount) | ext4 or FAT, at the drive's root |
 | `recovery_luks_uuid` | The LUKS layer below that filesystem, or `null` | Present when the recovery drive is encrypted |
 
-When reading the file, `build` and `kexec` require exactly these keys, with
-`host` and `hardware_uuid` matching the inventory and every value a string or
-`null`. A flag such as `--address` overrides one value for that run. A missing
-value stops the command and names the flag to supply. Run discovery again whenever
-the network, the controller or the recovery drive changes; the file may be copied
-to a build controller unchanged.
-
-`migration-boot discover --controller-cidr <ip>/32 --format command` prints the
-complete, quoted `build` command instead of YAML.
+A settings file must hold exactly these keys, with `host` and `hardware_uuid`
+matching the inventory. An empty or older file stops with the keys it lacks or
+should not have; move it aside and run again to rediscover.
+`migration-boot discover` prints the same values as YAML without saving them.
 
 ## 3. Build
 
 ```sh
-devenv shell migration-boot build gc-09 --settings ~/migration-settings.yml \
-  --output ~/migration-gc-09
+devenv shell migration-boot build gc-09 --output ~/migration-gc-09
 ```
 
 Use a reachable management network; the image has no VPN, DNS or Wi-Fi of the
@@ -190,21 +184,20 @@ host, with no reboot, boot entry or console. Over your existing SSH session, fro
 the devenv shell on the **target host**:
 
 ```sh
-devenv shell migration-boot kexec --settings ~/migration-settings.yml
-devenv shell migration-boot kexec --settings ~/migration-settings.yml --apply
+devenv shell migration-boot kexec
+devenv shell migration-boot kexec --apply
 ```
 
-The first command builds the RAM environment from the reviewed checkout and
-creates the SSH host key it will use. It prints that key's fingerprint and writes
-a ready `known_hosts` file to `~/migration-<host>-kexec/`; nothing is loaded. Copy
-that file to your controller.
-
-The second command asks you to type `START RAM <host>`, loads the RAM
-environment, and switches to it through `systemctl kexec`: the host shuts down
-cleanly, and the disks stay as they are. Your connection ends; after a minute or
-two, reconnect with the printed command. The machine's screen shows the address,
-the allowed controller and the fingerprint, or says that SSH stayed closed if the
-key did not arrive.
+The first command builds the RAM environment from the reviewed checkout and shows
+what it will do; nothing is loaded. The second builds the same, creates the SSH
+host key the RAM environment will use, writes it to
+`~/migration-<host>-kexec/known_hosts` and waits for `START RAM <host>`. Each run
+creates a new key, so copy that file to your controller **while the second command
+waits**, then type the phrase. It loads the RAM environment and switches through
+`systemctl kexec`: the host shuts down cleanly, and the disks stay as they are.
+Your connection ends; after a minute or two, reconnect with the printed command.
+The machine's screen shows the address, the allowed controller and the
+fingerprint, or says that SSH stayed closed if the key did not arrive.
 
 Run both commands in an interactive terminal as your normal user (not `sudo -i`):
 they need your private runtime directory and ask for the phrase and for `sudo`.
@@ -221,7 +214,7 @@ verified session, so no console phrase is needed. Remote access stays narrow:
 - The management interface keeps its name, matched by its permanent hardware
   address.
 
-It needs the reviewed settings with `controller_cidr`, a wired interface with its
+It needs the plan's settings, a wired interface with its
 permanent address, and free memory for the image. Kernel lockdown, usually from
 Secure Boot, blocks unsigned images; such hosts use the staged boot entry instead.
 `--bundle <path>` starts a prebuilt bundle. A later reboot returns to the boot

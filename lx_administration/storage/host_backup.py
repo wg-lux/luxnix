@@ -13,13 +13,12 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import time
 
 from lx_administration.storage import boot_migration as migration
-from lx_administration.storage import recovery_media, secret_preflight
+from lx_administration.storage import migration_boot, recovery_media, secret_preflight
 from lx_administration.utils.file_operations import atomic_create_file
 
 GIB = 1024**3
@@ -29,20 +28,14 @@ MOUNT_ROOT = Path("/run/luxnix-backup")
 SUMMARY = "host-backup.json"
 MANIFEST = "luxnix-backup.json"
 RSYNC = ("-aHAX", "--numeric-ids", "--delete", "--one-file-system")
-TRUSTED_TOOLS = ("/nix/store/", "/run/current-system/")
 
 
 def tool(name: str) -> str:
     """An immutable executable for root; sudo would otherwise reset PATH."""
-    found = name if os.path.isabs(name) else shutil.which(name)
-    if found is None:
-        raise migration.MigrationError(
-            f"{name} is required for the backup", fix="run from the devenv shell"
-        )
-    real = os.path.realpath(found)
-    if not real.startswith(TRUSTED_TOOLS):
-        raise migration.MigrationError(f"{name} is not from the Nix store: {real}")
-    return real
+    try:
+        return migration_boot.store_tool(name)
+    except ValueError as error:
+        raise migration.MigrationError(str(error)) from error
 
 
 def as_root(*command: str, capture: bool = False) -> str:
@@ -70,12 +63,36 @@ def mapping(host: str) -> str:
 
 def ensure_key(custody: Path, host: str) -> Path:
     """The container key lives only inside the encrypted custody."""
-    key = custody / host / "host-backup.key"
+    # The custody root belongs to the operator; per-host folders may be root's.
+    key = custody / f"host-backup-{host}.key"
+    legacy = custody / host / "host-backup.key"
+    if legacy.is_symlink() or legacy.exists():
+        migration.private_path(legacy)
+        if key.is_symlink() or key.exists():
+            migration.private_path(key)
+            if key.read_bytes() != legacy.read_bytes():
+                raise migration.MigrationError(
+                    "Conflicting backup keys; preserve both and verify which "
+                    "opens the backup"
+                )
+        return legacy
     if not key.exists():
-        key.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        atomic_create_file(
-            destination=key, content=[os.urandom(64)], file_mode=0o400
-        )
+        try:
+            container(host).lstat()
+        except FileNotFoundError:
+            pass
+        else:
+            raise migration.MigrationError(
+                f"Missing backup key for {container(host)}; restore its original "
+                "key from custody before retrying. No replacement was generated."
+            )
+        try:
+            atomic_create_file(
+                destination=key, content=[os.urandom(64)], file_mode=0o400
+            )
+        except FileExistsError:
+            # Another creator won the exclusive link; validate and reuse its key.
+            pass
     migration.private_path(key)
     return key
 
@@ -242,9 +259,7 @@ def run(spec: dict, state: Path, custody: Path) -> dict:
             "verified_at": time.time(),
         }
         migration.atomic_json(state / SUMMARY, summary)
-        as_root(
-            "install", "-m", "0600", str(state / SUMMARY), str(mount / MANIFEST)
-        )
+        as_root("install", "-m", "0600", str(state / SUMMARY), str(mount / MANIFEST))
     finally:
         close_container(host)
     prune(report["identifier"])

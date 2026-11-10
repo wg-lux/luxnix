@@ -5,6 +5,8 @@ import copy
 import json
 import os
 from pathlib import Path
+import shutil
+import stat
 import subprocess
 from types import SimpleNamespace
 
@@ -1222,3 +1224,123 @@ def test_kexec_runs_only_on_its_own_host(kexec_host):
     args.host = "another-host"
     with pytest.raises(ValueError, match="target host itself"):
         boot.kexec(args)
+
+
+@pytest.fixture
+def settings_host(tmp_path, monkeypatch):
+    state = tmp_path / "luxnix-state" / "gc-09"
+    state.mkdir(parents=True)
+    observed = {
+        "host": "gc-09",
+        "hardware_uuid": "e0118e2d-e0c4-9844-a4eb-9fe2b5747b0d",
+        "interface": "enp4s0",
+        "address": "192.168.0.222/24",
+        "gateway": "192.168.0.1",
+        "controller_cidr": None,
+        "recovery_uuid": "530b7f22-bb3d-4444-8966-f6802e590f50",
+        "recovery_fstype": "ext4",
+        "recovery_luks_uuid": None,
+    }
+    monkeypatch.setattr(boot, "plan_settings", lambda host: state / boot.SETTINGS_FILE)
+    monkeypatch.setattr(
+        boot, "observe_settings", lambda args, host, cfg: dict(observed)
+    )
+    monkeypatch.delenv("SSH_CONNECTION", raising=False)
+    args = SimpleNamespace(host="gc-09", controller_cidr=None, settings=None)
+    return state, args
+
+
+def test_settings_are_discovered_and_saved_with_the_plan(settings_host, monkeypatch):
+    state, args = settings_host
+    monkeypatch.setenv("SSH_CONNECTION", "192.168.0.201 50000 192.168.0.222 22")
+    path = boot.default_settings(args, {})
+    assert path == state / boot.SETTINGS_FILE
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    saved = load_unique_yaml_file(path)
+    assert saved["controller_cidr"] == "192.168.0.201/32"
+    assert set(saved) == {"host", "hardware_uuid", *boot.BUILD_SETTINGS}
+    # A later run reuses the saved file instead of discovering again.
+    monkeypatch.setattr(
+        boot, "observe_settings", lambda *a: pytest.fail("reuse the saved file")
+    )
+    assert boot.default_settings(args, {}) == path
+
+
+def test_a_vpn_session_is_never_taken_as_the_controller(settings_host, monkeypatch):
+    state, args = settings_host
+    monkeypatch.setenv("SSH_CONNECTION", "172.16.255.10 50000 172.16.255.109 22")
+    with pytest.raises(ValueError, match="outside the management network"):
+        boot.default_settings(args, {})
+    assert not (state / boot.SETTINGS_FILE).exists()
+
+
+def test_an_explicit_controller_is_kept(settings_host, monkeypatch):
+    state, args = settings_host
+    monkeypatch.setenv("SSH_CONNECTION", "172.16.255.10 50000 172.16.255.109 22")
+
+    def observe(args, host, cfg):
+        return {"controller_cidr": args.controller_cidr, "address": "192.168.0.222/24"}
+
+    monkeypatch.setattr(boot, "observe_settings", observe)
+    args.controller_cidr = "192.168.0.201/32"
+    path = boot.default_settings(args, {})
+    assert load_unique_yaml_file(path)["controller_cidr"] == "192.168.0.201/32"
+
+
+def test_an_empty_settings_file_says_so(tmp_path):
+    empty = tmp_path / "migration-settings.yml"
+    empty.write_text("")
+    args = SimpleNamespace(settings=empty, host="gc-09")
+    with pytest.raises(ValueError, match="is empty. Rerun without --settings"):
+        boot.build_settings(args, {"hardware_uuid": "x"})
+
+
+def test_a_stale_settings_file_names_its_keys(tmp_path):
+    stale = tmp_path / "migration-settings.yml"
+    stale.write_text("host: gc-09\nhardware_uuid: x\nold_key: y\n")
+    args = SimpleNamespace(settings=stale, host="gc-09")
+    with pytest.raises(ValueError, match=r"unexpected \['old_key'\]"):
+        boot.build_settings(args, {"hardware_uuid": "x"})
+
+
+def test_the_hardware_uuid_is_read_through_sudo_for_an_operator(monkeypatch):
+    calls = []
+
+    def denied(path, *a, **k):
+        raise PermissionError(path)
+
+    monkeypatch.setattr(Path, "read_text", denied)
+    monkeypatch.setattr(boot, "store_tool", lambda name: f"/nix/store/x/bin/{name}")
+    monkeypatch.setattr(
+        boot.subprocess,
+        "run",
+        lambda argv, **kw: calls.append(argv)
+        or SimpleNamespace(stdout="E0118E2D-E0C4-9844-A4EB-9FE2B5747B0D\n"),
+    )
+    assert boot.hardware_uuid() == "e0118e2d-e0c4-9844-a4eb-9fe2b5747b0d"
+    assert calls == [
+        ["sudo", "--", "/nix/store/x/bin/cat", "/sys/class/dmi/id/product_uuid"]
+    ]
+
+
+def test_store_tool_executes_the_multicall_command(tmp_path):
+    if not os.path.realpath(shutil.which("cat") or "").startswith("/nix/store/"):
+        pytest.skip("requires Nix-store coreutils")
+    sample = tmp_path / "sample"
+    sample.write_text("public test data\n")
+    executable = boot.store_tool("cat")
+    assert (
+        subprocess.check_output([executable, str(sample)], text=True)
+        == sample.read_text()
+    )
+
+
+def test_store_tool_refuses_a_mutable_alias_to_a_store_binary(tmp_path, monkeypatch):
+    real = shutil.which("cat")
+    if not real or not os.path.realpath(real).startswith("/nix/store/"):
+        pytest.skip("requires Nix-store coreutils")
+    alias = tmp_path / "cat"
+    alias.symlink_to(real)
+    monkeypatch.setattr(boot.shutil, "which", lambda name: str(alias))
+    with pytest.raises(ValueError, match="from the Nix store is required"):
+        boot.store_tool("cat")

@@ -18,7 +18,7 @@ commands:
     operator_confirmation_required: true
     usage: devenv shell migration-boot discover [<host>] [--controller-cidr <ipv4/prefix>] [--format command]; devenv shell migration-boot build <host> --settings <settings.yml> --output <new-directory> [--boot-trust local-console|secure-boot] [--sign]
     local_staging: devenv shell migration-boot stage [<host>] [--bundle <directory>] [--allow-unverified-boot] [--apply]
-    remote_start: devenv shell migration-boot kexec [<host>] --settings <settings.yml> [--bundle <directory>] [--apply]
+    remote_start: devenv shell migration-boot kexec [<host>] [--controller-cidr <ipv4/32>] [--settings <settings.yml>] [--bundle <directory>] [--apply]
     implementation: lx_administration/storage/migration_boot.py
     documentation: docs/migration-environment.md
     prerequisites:

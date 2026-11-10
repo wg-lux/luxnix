@@ -140,12 +140,17 @@ Before asking about the backup, the guide updates one encrypted backup of the ho
 on the recovery drive, `luxnix-backup-<host>.luks`:
 
 1. A LUKS2 container opened with a random key kept in encrypted custody
-   (`<custody>/<host>/host-backup.key`); it grows when the host's data grows.
+   (`<custody>/host-backup-<host>.key`); it grows when the host's data grows.
 2. A consistent capture through `snapshot.py`: declared writers stop briefly,
    inner filesystems freeze, read-only snapshots are taken, services restart.
 3. `rsync` copies only what changed and removes what was deleted, then a
    `--checksum` comparison verifies every file against the snapshot.
 4. Only the newest capture snapshots stay on the host.
+
+New keys use the operator-owned custody root even when older host folders belong
+to root. Existing `<custody>/<host>/host-backup.key` credentials are reused. A
+missing key for an existing container, conflicting keys or inaccessible storage
+stops the backup without generating a replacement or changing ownership.
 
 The guide offers this backup first, recorded as `copy-verified`; another tested
 backup can be named instead. A verified copy is a strong start, and a tested

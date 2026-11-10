@@ -138,7 +138,7 @@ def test_first_backup_creates_an_encrypted_container_then_copies_and_verifies(
     order = names(calls)
     assert order.index("cryptsetup") < order.index("mkfs.ext4") < order.index("rsync")
     format_call = next(c for c in calls if c[:2] == ("cryptsetup", "luksFormat"))
-    key = machine["custody"] / "gc-09" / "host-backup.key"
+    key = machine["custody"] / "host-backup-gc-09.key"
     assert str(key) in format_call
     assert stat.S_IMODE(key.stat().st_mode) == 0o400 and len(key.read_bytes()) == 64
     copies = [c for c in calls if c[0] == "rsync" and "--dry-run" not in c]
@@ -168,8 +168,7 @@ def test_first_backup_creates_an_encrypted_container_then_copies_and_verifies(
 def test_later_runs_update_the_same_container_without_reformatting(machine):
     world = machine["world"]
     world.update(container=True, size=100 * GIB)
-    key = machine["custody"] / "gc-09" / "host-backup.key"
-    key.parent.mkdir()
+    key = machine["custody"] / "host-backup-gc-09.key"
     key.write_bytes(b"k" * 64)
     key.chmod(0o400)
     backup.run({"host": "gc-09"}, machine["state"], machine["custody"])
@@ -184,6 +183,7 @@ def test_later_runs_update_the_same_container_without_reformatting(machine):
 
 def test_a_growing_machine_grows_the_container_in_place(machine):
     world = machine["world"]
+    backup.ensure_key(machine["custody"], "gc-09")
     world.update(container=True, size=60 * GIB)
     backup.run({"host": "gc-09"}, machine["state"], machine["custody"])
     order = names(machine["calls"])
@@ -260,9 +260,91 @@ def test_root_commands_use_immutable_store_tools(monkeypatch, tmp_path):
     fake = tmp_path / "rsync"
     fake.write_text("#!/bin/sh\n")
     fake.chmod(0o755)
-    monkeypatch.setattr(backup.shutil, "which", lambda name: str(fake))
-    with pytest.raises(migration.MigrationError, match="not from the Nix store"):
+    monkeypatch.setattr(backup.migration_boot.shutil, "which", lambda name: str(fake))
+    with pytest.raises(
+        migration.MigrationError, match="from the Nix store is required"
+    ):
         backup.tool("rsync")
-    monkeypatch.setattr(backup.shutil, "which", lambda name: None)
-    with pytest.raises(migration.MigrationError, match="required for the backup"):
+    monkeypatch.setattr(backup.migration_boot.shutil, "which", lambda name: None)
+    with pytest.raises(
+        migration.MigrationError, match="required; use the devenv shell"
+    ):
         backup.tool("rsync")
+
+
+def test_the_backup_key_lives_in_the_operator_owned_custody_root(machine):
+    # Per-host custody folders may be root-owned from earlier sudo copies.
+    root_folder = machine["custody"] / "gc-09"
+    root_folder.mkdir(mode=0o555)
+    key = backup.ensure_key(machine["custody"], "gc-09")
+    assert key == machine["custody"] / "host-backup-gc-09.key"
+    assert stat.S_IMODE(key.stat().st_mode) == 0o400
+    root_folder.chmod(0o700)
+
+
+def test_existing_legacy_key_is_reused_without_replacement(machine):
+    legacy = machine["custody"] / "gc-09" / "host-backup.key"
+    legacy.parent.mkdir(mode=0o700)
+    legacy.write_bytes(b"old" * 21 + b"!")
+    legacy.chmod(0o400)
+    machine["world"].update(container=True, size=100 * GIB)
+    backup.run({"host": "gc-09"}, machine["state"], machine["custody"])
+    assert legacy.read_bytes() == b"old" * 21 + b"!"
+    assert not (machine["custody"] / "host-backup-gc-09.key").exists()
+    assert not any("luksFormat" in c for c in machine["calls"])
+    assert any(str(legacy) in c for c in machine["calls"] if "open" in c)
+
+
+def test_existing_container_without_key_never_generates_a_replacement(
+    machine, monkeypatch
+):
+    machine["world"]["container"] = True
+    backup.container("gc-09").touch()
+    monkeypatch.setattr(
+        backup.os, "urandom", lambda n: pytest.fail("must preserve the missing key")
+    )
+    with pytest.raises(migration.MigrationError, match="restore its original key"):
+        backup.run({"host": "gc-09"}, machine["state"], machine["custody"])
+    assert list(machine["custody"].iterdir()) == []
+    assert machine["calls"] == []
+
+
+def test_conflicting_keys_stop_without_changing_either(machine):
+    legacy = machine["custody"] / "gc-09" / "host-backup.key"
+    legacy.parent.mkdir(mode=0o700)
+    legacy.write_bytes(b"a" * 64)
+    current = machine["custody"] / "host-backup-gc-09.key"
+    current.write_bytes(b"b" * 64)
+    with pytest.raises(migration.MigrationError, match="Conflicting backup keys"):
+        backup.ensure_key(machine["custody"], "gc-09")
+    assert legacy.read_bytes() == b"a" * 64
+    assert current.read_bytes() == b"b" * 64
+
+
+def test_unreadable_backup_location_never_implies_a_missing_container(
+    machine, monkeypatch
+):
+    real_stat = Path.lstat
+
+    def denied(path, *args, **kwargs):
+        if path == backup.container("gc-09"):
+            raise PermissionError("backup storage is inaccessible")
+        return real_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", denied)
+    with pytest.raises(PermissionError, match="inaccessible"):
+        backup.ensure_key(machine["custody"], "gc-09")
+    assert list(machine["custody"].iterdir()) == []
+
+
+def test_concurrent_key_creation_reuses_one_credential(machine):
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=4) as workers:
+        keys = list(
+            workers.map(
+                lambda _: backup.ensure_key(machine["custody"], "gc-09").read_bytes(),
+                range(8),
+            )
+        )
+    assert len(set(keys)) == 1 and len(keys[0]) == 64

@@ -54,7 +54,22 @@ let
     }:$PATH
     export PYTHONPATH=${repoRoot} XDG_RUNTIME_DIR=/run/kexec-test
     exec python -m lx_administration.storage.migration_boot kexec \
-      --bundle ${bundle} --output /root/migration-target-kexec "$@"
+      --bundle ${bundle} --output /home/operator/migration-target-kexec "$@"
+  '';
+  checkBackupKey = pkgs.writeShellScript "check-backup-key" ''
+    export PYTHONPATH=${repoRoot}
+    export PATH=${pkgs.lib.makeBinPath [ pkgs.coreutils ]}:$PATH
+    exec ${python}/bin/python - <<'PY'
+    from pathlib import Path
+    from lx_administration.storage.host_backup import ensure_key
+    custody = Path('/run/kexec-test/custody')
+    key = ensure_key(custody, 'target')
+    assert key.parent == custody and len(key.read_bytes()) == 64
+    original = key.read_bytes()
+    assert ensure_key(custody, 'target').read_bytes() == original
+    assert (custody / 'target').stat().st_uid == 0
+    assert list((custody / 'target').iterdir()) == []
+    PY
   '';
 in
 pkgs.testers.runNixOSTest {
@@ -70,6 +85,12 @@ pkgs.testers.runNixOSTest {
       };
       environment.systemPackages = [ pkgs.util-linux ];
       environment.etc."migration-kexec".source = start;
+      users.users.operator = {
+        isNormalUser = true;
+        extraGroups = [ "wheel" ];
+      };
+      # Only the disposable test administrator has passwordless sudo.
+      security.sudo.wheelNeedsPassword = false;
     };
   };
   testScript = ''
@@ -79,29 +100,36 @@ pkgs.testers.runNixOSTest {
 
     # Private tmpfs workspace, as an operator's runtime directory provides.
     target.succeed("mkdir -p /run/kexec-test && mount -t tmpfs -o size=3G,mode=0700 tmpfs /run/kexec-test")
+    target.succeed("chown operator:users /run/kexec-test")
     controller.succeed("install -D -m 0600 ${keys.snakeOilPrivateKey} /root/.ssh/id_ed25519")
 
+    with subtest("Normal user handles root-only UUID and root-owned custody host folder"):
+        target.fail("runuser -u operator -- cat /sys/class/dmi/id/product_uuid")
+        target.succeed("install -d -o operator -g users -m 0700 /run/kexec-test/custody")
+        target.succeed("mkdir /run/kexec-test/custody/target && chmod 0755 /run/kexec-test/custody/target")
+        target.succeed("runuser -u operator -- ${checkBackupKey}")
+
     with subtest("Preview pins a host key and loads nothing"):
-        preview = target.succeed("/etc/migration-kexec")
+        preview = target.succeed("runuser -u operator -- /etc/migration-kexec")
         print(preview)
         assert "Preview only; nothing was loaded" in preview
         assert "Host key: 256 SHA256:" in preview
         target.succeed("grep -x 0 /sys/kernel/kexec_loaded")
-        known_hosts = target.succeed("cat /root/migration-target-kexec/known_hosts")
+        known_hosts = target.succeed("cat /home/operator/migration-target-kexec/known_hosts")
         assert known_hosts.startswith("[192.168.1.2]:2222 ssh-ed25519 "), known_hosts
 
     with subtest("A wrong confirmation loads nothing"):
-        target.fail("echo nope | script -qec /etc/migration-kexec\\ --apply /dev/null")
+        target.fail("echo nope | runuser -u operator -- script -qec '/etc/migration-kexec --apply' /dev/null")
         target.succeed("grep -x 0 /sys/kernel/kexec_loaded")
 
     # Each run pins a new key: read it while this host waits for the phrase, as
     # an operator copies known_hosts before typing it.
     target.succeed(
-        "((sleep 45; echo 'START RAM target') | script -qec '/etc/migration-kexec --apply' /dev/null"
+        "((sleep 45; echo 'START RAM target') | runuser -u operator -- script -qec '/etc/migration-kexec --apply' /dev/null"
         " > /tmp/kexec.log 2>&1 &)"
     )
     target.wait_until_succeeds("grep -q 'Type START RAM target' /tmp/kexec.log", timeout=40)
-    known_hosts = target.succeed("cat /root/migration-target-kexec/known_hosts")
+    known_hosts = target.succeed("cat /home/operator/migration-target-kexec/known_hosts")
     # The running system is gone after this; the RAM environment has no test agent.
     target.connected = False
     controller.succeed(f"printf '%s' '{known_hosts}' > /root/pinned_known_hosts")
