@@ -1,9 +1,51 @@
 # RAM migration environment
 
-A small EFI loader starts a separate runtime from the recovery drive, copies it
-into RAM, verifies its digest and releases the drive. From there the root disk is
-converted while nothing uses it. Booting it changes nothing on its own, and the
-existing boot generations stay.
+The RAM environment is a small system that runs entirely in memory, so the root
+disk can be converted while nothing uses it. Starting it changes nothing on its
+own, and the existing boot generations stay.
+
+## Getting in
+
+There are two ways to start it. Choose by where you are:
+
+| | Staged boot entry | `migration-boot kexec` |
+| --- | --- | --- |
+| Use when | You are at the machine | You work remotely |
+| How it starts | Reboot; the firmware takes the one-shot entry ([stage it first](#4-stage-then-arm)) | From the running host, without a reboot ([remote start](#start-without-a-reboot-remote)) |
+| The screen shows | Boot messages, then the approval prompt | Boot messages, then an access screen with the address and SSH fingerprint |
+| At the machine | Type `BOOT UNVERIFIED <host> <revision-prefix>`; a root shell opens on the screen | No login; the screen only shows how to connect |
+| Over SSH | Port 2222 after approval, when administrator keys are configured; check the fingerprint shown on the screen | Port 2222 with the `known_hosts` file written before the switch |
+
+Connect from the controller (an address in `controller_cidr`) with:
+
+```sh
+ssh -o UserKnownHostsFile=<known_hosts> -o StrictHostKeyChecking=yes -p 2222 root@<address>
+```
+
+For the staged entry, write `known_hosts` yourself from the fingerprint on the
+screen; it changes with every boot. Then continue with
+[luxnix-migration](#5-boot-and-migrate).
+
+### If the screen stays black
+
+Starting takes a minute or two while the image is copied and unpacked. If the
+screen is still black after that:
+
+1. **Switch to the first console:** press `Ctrl`+`Alt`+`F1`; the prompt and
+   messages appear there.
+2. **Check the image's age:** images built before the console fix sent the
+   prompt to the serial port, not the screen. The `gc-09` image built from
+   `b716c024` is one of them. Build and stage a new image from the current checkout.
+3. **Check the build option:** an image built with `--console ttyS0` uses the
+   serial port by design. Build with the default `--console tty1` for a screen.
+4. **After a kexec start, use SSH:** the screen is not needed; connect as above.
+
+To leave a black staged boot, power off and on: the migration entry is armed for
+one boot only, so the normal system starts again, as long as conversion has not
+begun. Once it has begun, every reboot returns to the migration entry by design;
+see [the boot default during conversion](boot-storage-map.md#the-boot-default-during-conversion).
+Report where the screen went black, before or after the first kernel messages,
+so the cause can be found.
 
 ## 1. Prepare
 
@@ -107,13 +149,8 @@ This copies and verifies the artifacts. Review the result, then repeat with
 
 ## 5. Boot and migrate
 
-After the reboot, the physical screen (`tty1`, or `ttyS0` when built with
-`--console ttyS0`) asks for `BOOT UNVERIFIED <host> <revision-prefix>`. Check the
-host and trust notice, then type the phrase to open a root terminal and, with
-keys configured, SSH on port **2222**. Verify the SSH fingerprint on the console
-and pin it before connecting with strict host-key checking; it changes each boot.
-
-Mount the recovery drive at `/recovery` and run:
+Get in as described in [Getting in](#getting-in): approve at the screen, or
+connect over SSH. Then mount the recovery drive at `/recovery` and run:
 
 ```sh
 luxnix-migration run --apply
@@ -164,12 +201,14 @@ that file to your controller.
 
 The second command asks you to type `START RAM <host>`, loads the RAM
 environment, and switches to it through `systemctl kexec`: the host shuts down
-cleanly, and the disks stay as they are. Your connection ends; reconnect with the
-printed command:
+cleanly, and the disks stay as they are. Your connection ends; after a minute or
+two, reconnect with the printed command. The machine's screen shows the address,
+the allowed controller and the fingerprint, or says that SSH stayed closed if the
+key did not arrive.
 
-```sh
-ssh -o UserKnownHostsFile=<known_hosts> -o StrictHostKeyChecking=yes -p 2222 root@<address>
-```
+Run both commands in an interactive terminal as your normal user (not `sudo -i`):
+they need your private runtime directory and ask for the phrase and for `sudo`.
+The image is about 430 MB and fits there on machines with 16 GB.
 
 The running host is the trust step: you start the environment as root from a
 verified session, so no console phrase is needed. Remote access stays narrow:

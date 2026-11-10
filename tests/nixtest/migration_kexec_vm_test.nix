@@ -119,6 +119,13 @@ pkgs.testers.runNixOSTest {
         controller.succeed(ssh + "test -x /run/current-system/sw/bin/luxnix-migration")
         assert controller.succeed(ssh + "ip -brief link show eth1").startswith("eth1")
 
+    with subtest("The screen shows how to connect instead of a login"):
+        controller.succeed(ssh + "systemctl is-active luxnix-migration-access.service")
+        controller.fail(ssh + "systemctl is-active getty@tty1.service")
+        # The screen is the last console, so boot status and messages reach it.
+        cmdline = controller.succeed(ssh + "cat /proc/cmdline")
+        assert cmdline.index("console=ttyS0") < cmdline.index("console=tty0"), cmdline
+
     with subtest("Any other host key is refused"):
         controller.succeed("ssh-keygen -q -t ed25519 -N ''' -f /root/other")
         controller.succeed("printf '[192.168.1.2]:2222 %s\\n' \"$(cut -d' ' -f1,2 /root/other.pub)\" > /root/other_known_hosts")

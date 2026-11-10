@@ -109,10 +109,45 @@ let
             };
             generators.systemd-ssh-generator = lib.mkIf (!sshEnabled) "/dev/null";
             services = {
-              # A local shell is available only after physical approval in this image.
-              "getty@tty1".enable = lib.mkIf localConsole false;
-              "autovt@tty1".enable = lib.mkIf localConsole false;
-              "serial-getty@ttyS0".enable = lib.mkIf localConsole false;
+              # A local shell is available only after physical approval in this image;
+              # a host-kexec image has none and shows how to connect instead.
+              "getty@tty1".enable = lib.mkIf (localConsole || hostKexec) false;
+              "autovt@tty1".enable = lib.mkIf (localConsole || hostKexec) false;
+              "serial-getty@ttyS0".enable = lib.mkIf (localConsole || hostKexec) false;
+              luxnix-migration-access = lib.mkIf hostKexec {
+                wantedBy = [ "multi-user.target" ];
+                after = [
+                  "luxnix-migration-admission.service"
+                  "sshd.service"
+                ];
+                path = [
+                  pkgs.openssh
+                  pkgs.systemd
+                ];
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                  StandardOutput = "tty";
+                  TTYPath = "/dev/${console}";
+                  TTYReset = true;
+                };
+                script = ''
+                  clear || true
+                  echo "LuxNix migration environment for ${spec.host}, started remotely"
+                  echo
+                  if systemctl is-active --quiet sshd.service; then
+                    echo "Access: ssh -p ${toString spec.policy.ssh_port} root@${builtins.head (lib.splitString "/" spec.address)}"
+                    echo "Allowed from: ${spec.controller_cidr}, administrator keys only"
+                    echo "Host key: $(ssh-keygen -lf ${kexecHostKey}.pub)"
+                  else
+                    echo "SSH is closed: this environment did not receive the host key"
+                    echo "pinned by migration-boot kexec. Power off and start again."
+                  fi
+                  echo
+                  echo "There is no login on this screen. To work here instead, boot the"
+                  echo "staged LuxNix migration entry from the boot menu."
+                '';
+              };
               luxnix-migration-console = lib.mkIf localConsole {
                 wantedBy = [ "multi-user.target" ];
                 requires = [ "luxnix-migration-admission.service" ];
@@ -237,13 +272,27 @@ let
               "ext4"
               "vfat"
             ];
-            kernelParams = [
-              "console=tty0"
-              "console=ttyS0,115200"
-              "noresume"
-              "rd.systemd.gpt_auto=0"
-              "systemd.gpt_auto=0"
-            ];
+            # The last console receives boot status and prompts: the selected one.
+            # The EFI loader layer sets its own; this order serves migration-boot kexec.
+            kernelParams =
+              (
+                if console == "ttyS0" then
+                  [
+                    "console=tty0"
+                    "console=ttyS0,115200"
+                  ]
+                else
+                  [
+                    "console=ttyS0,115200"
+                    "console=tty0"
+                  ]
+              )
+              ++ [
+                "systemd.show_status=1"
+                "noresume"
+                "rd.systemd.gpt_auto=0"
+                "systemd.gpt_auto=0"
+              ];
             uki = {
               name = "luxnix-migration-${spec.host}";
               version = spec.revision;

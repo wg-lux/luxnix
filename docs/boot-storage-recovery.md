@@ -91,10 +91,13 @@ memory before copying. It boots with basic graphics (`nomodeset`), visible kerne
 messages, and the selected console last, so on `tty1` errors and the approval
 prompt appear on the attached screen (a `ttyS0` build uses the serial console).
 
-A blank screen alone does not mean RAM ran out. Note whether it goes blank before
-any kernel text or after a specific message, keep the existing system and recovery
-entries, and report it for diagnosis. The UEFI VM test covers boot and keyboard
-approval with 5 GiB RAM; each physical display is confirmed on the host.
+A blank screen alone does not mean RAM ran out. Follow
+[If the screen stays black](migration-environment.md#if-the-screen-stays-black):
+switch to the first console, rebuild images made before the console fix, and use
+SSH after a remote start. Keep the existing system and recovery entries, and
+report whether the screen went blank before or after the first kernel messages.
+The UEFI VM test covers boot and keyboard approval with 5 GiB RAM; each physical
+display is confirmed on the host.
 
 ## Unrecognized partition
 
