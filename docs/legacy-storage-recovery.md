@@ -36,7 +36,7 @@ do not remove them merely because root encryption is now the target layout.
 
 | Host | Repository configuration | Old live storage to preserve |
 | --- | --- | --- |
-| gc-09 | `boot-luks` since 2026-11-03; the installed generation still runs containers | `luxnix-secrets` and `luxnix-app-storage` containers |
+| gc-09 | `boot-luks` encryption target; plaintext root still runs the recovery generation | Both inaccessible containers explicitly discarded by the operator on 2026-11-11; no container data to consolidate |
 | gc-10 | `legacy-containers`: preserve existing partitions and unlock through Plymouth | Containers listed in [gc-10](#gc-10) |
 | gs-02 | `boot-luks`; the Vault TLS container option evaluates off | `/var/lib/luxnix-vault-tls.luks` holding Vault PKI and managed secrets |
 
@@ -63,6 +63,12 @@ does not convert storage (see [temporary compatibility](boot-storage-migration.m
 - Never put a passphrase in chat, command arguments, inventory or logs.
 
 ## Unlocking gc-09 and gc-10 at boot
+
+gc-09 no longer has containers to unlock. Its inventory clears the legacy volume
+and bind metadata so a new encryption plan does not request their passphrases or
+copy their data. After retaining a clean reviewed release, rerun `luxnix migrate`
+to replace an unstarted plan; never edit an existing plan by hand. Do not activate
+the boot-LUKS target on gc-09 before root conversion and verification.
 
 Unlock policy is shared across hosts, without a hostname allowlist. Selecting
 `legacy-containers` with passphrase-protected volumes enables Plymouth and

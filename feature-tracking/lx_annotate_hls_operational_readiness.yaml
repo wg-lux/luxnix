@@ -210,18 +210,27 @@ definition_of_done:
       reference: 2026-11-11 backend 36 recovery/command + 47 processed-timeline/frame-coordinate tests
         passed; Pyright 0 errors/0 warnings; LuxNix 36 wheel-guard + 1 VPN ordering regression passed;
         structure validators and tracker validation passed.
-    note: 2026-11-11 gc-10 persistent native switch is running with candidate /nix/store/h39rp580hgs4inbxjlv2ywbzwwz3dkhn-nixos-system-gc-10-26.05.20261102.7dcdd87.
-      Active system and system profile already agree; boot loader defaults to generation 157. Canonical
-      target source /home/admin/luxnix at 1fd1c66cf3a878acb5edfe9828c0f054859f6ec9 plus reviewed migration/VPN
-      ordering/host artifact patches; flake.lock SHA256 6a85a056a29365a69f40de5db22b661da7a92b59c8902f8fbf0d7e9e99654fd4.
-      App 1.7.7 unchanged; backend hotfix 1.8.2+luxnix.1 pinned only for gc-10 through release-artifacts/endoreg-db/1.8.2+luxnix.1/manifest.yml,
-      wheel SHA256 803ad9841a30994e01bcec3a377abdd9150ae4294ae58a025566ca86112cdd53. Runtime installation
-      succeeded and automatic migration is decoding PTS. User explicitly moved identity verification to
-      import and made PTS authoritative over legacy frame counts; affected videos have no saved frame
-      annotations, boxes, segments or extracted flags. Legacy containers and disabled disk migration preserved.
-      Acceptance remains in progress until backfill, app health and switch exit are verified.
+    - kind: command
+      reference: '2026-11-11 gc-10: backfill report backfilled=8, blocked=0, failed=0; all-30 PTS/index
+        audit and authenticated timeline API passed; lx-annotate-acceptance.service Result=success ExecMainStatus=0;
+        real Celery queue replies match installed inference/post-validation task routes.'
+    note: '2026-11-11 gc-10 app/PTS acceptance passed. Active system and persisted profile are /nix/store/h39rp580hgs4inbxjlv2ywbzwwz3dkhn-nixos-system-gc-10-26.05.20261102.7dcdd87;
+      boot default generation 157; fresh SSH verified. Source /home/admin/luxnix at 1fd1c66cf3a878acb5edfe9828c0f054859f6ec9
+      plus reviewed migration, VPN ordering, host inventory and retained artifact changes; flake.lock
+      SHA256 6a85a056a29365a69f40de5db22b661da7a92b59c8902f8fbf0d7e9e99654fd4. App 1.7.7, backend 1.8.2+luxnix.1,
+      lx-dtypes 0.6.4; backend wheel SHA256 803ad9841a30994e01bcec3a377abdd9150ae4294ae58a025566ca86112cdd53
+      and installed direct_url provenance match retained manifest. Automatic migration restored 8 videos
+      / 1300926 frames with zero blocked or failed entries. All 30 videos / 3731878 rows have PTS and
+      timestamps; frame/time round trips and neighborhoods passed for all 30, authenticated video 41 API
+      returned HTTP 200 with ffprobe_pts. lx-annotate, nginx and all configured workers are running; acceptance
+      service exited 0 after Django, encrypted-storage and HTTPS static-manifest checks. Actual 1.7.7
+      task routing is inference and ffmpeg_media, both have active consumers. Legacy containers and disabled
+      disk migration preserved. Native switch exited 4 solely for identity-salt migration: 26 legacy patient
+      identity groups lack authenticated/reviewable source mappings; zero identity rows changed. This
+      failure is preserved, not bypassed. pip check separately flags existing decord 0.6.0 cp36 wheel
+      metadata on CPython 3.12. Fleet/provenance readiness remains incomplete.'
     assessed_by: codex-pts-backfill-20261110
-    assessed_at: '2026-11-11T07:18:44.852134Z'
+    assessed_at: '2026-11-11T08:27:11.635348Z'
 - id: hls_privacy_safe_host_diagnostics
   category: security
   title: WP-LN-05 Host diagnostics are useful without disclosing media identity

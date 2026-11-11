@@ -47,7 +47,5 @@ def test_only_gc10_retains_legacy_containers():
         timeout=300,
     )
     assert result.returncode == 0, result.stderr
-    # Owner decision 2026-11-04: gc-10 keeps its installed containers. gc-09 keeps
-    # them until its plaintext root is converted; every other inventory host selects
-    # boot-luks.
-    assert json.loads(result.stdout) == ["gc-09", "gc-10"]
+    # gc-09's inaccessible containers were explicitly discarded on 2026-11-11.
+    assert json.loads(result.stdout) == ["gc-10"]

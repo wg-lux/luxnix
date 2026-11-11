@@ -234,6 +234,8 @@ let
             hashedPassword = "!";
             openssh.authorizedKeys.keys = spec.authorized_keys;
           };
+          # The root is a fresh tmpfs; the recovery drive mounts here.
+          systemd.tmpfiles.rules = [ "d /recovery 0700 root root - -" ];
           swapDevices = lib.mkForce [ ];
           zramSwap.enable = lib.mkForce false;
           boot = {

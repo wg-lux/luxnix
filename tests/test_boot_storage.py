@@ -528,6 +528,8 @@ def test_former_legacy_hosts_use_fleet_boot_luks(host):
           luxnix.storage.operatorUnlocked.layout = f.inputs.nixpkgs.lib.mkForce "boot-luks";
         }]; }).config;
     in { layout = c.luxnix.storage.operatorUnlocked.layout;
+         containers = builtins.attrNames c.luxnix.storage.operatorUnlocked.volumes;
+         binds = builtins.attrNames c.luxnix.storage.operatorUnlocked.bindMounts;
          root = c.boot.initrd.luks.devices.cryptroot.device;
          openbao = c.luxnix.openbao.local.enable;
          legacyUnits = builtins.filter (n: builtins.elem n [ "luxnix-storage-restack"
@@ -542,6 +544,7 @@ def test_former_legacy_hosts_use_fleet_boot_luks(host):
     assert result.returncode == 0, result.stderr
     state = json.loads(result.stdout)
     assert state['layout'] == 'boot-luks'
+    assert state['containers'] == [] and state['binds'] == []
     assert state['root'] == '/dev/disk/by-partlabel/nixos_root'
     assert state['openbao'] is False
     assert state['legacyUnits'] == [] and state['secretsBind'] is False

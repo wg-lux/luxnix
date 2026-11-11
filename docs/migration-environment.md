@@ -144,9 +144,11 @@ This copies and verifies the artifacts. Review the result, then repeat with
 ## 5. Boot and migrate
 
 Get in as described in [Getting in](#getting-in): approve at the screen, or
-connect over SSH. Then mount the recovery drive at `/recovery` and run:
+connect over SSH. Then mount the recovery drive and run:
 
 ```sh
+mkdir -p /recovery    # images built before 2026-11-11 lack this directory
+mount -o nosuid,nodev /dev/disk/by-uuid/<recovery-uuid> /recovery
 luxnix-migration run --apply
 ```
 

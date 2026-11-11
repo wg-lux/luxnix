@@ -31,9 +31,11 @@ host_nixos:
 extra_secret_names: []
 
 host_luxnix:
-  # The physical root is still plaintext Btrfs. Select boot-luks only after in-place
-  # conversion passes `luxnix verify`; `luxnix migrate` plans that target explicitly.
-  storage.operatorUnlocked.layout: '"legacy-containers"'
+  # Encryption target only: retain the running recovery generation until conversion.
+  # The operator discarded both inaccessible containers on 2026-11-11.
+  storage.operatorUnlocked.layout: '"boot-luks"'
+  storage.operatorUnlocked.volumes: "lib.mkForce { }"
+  storage.operatorUnlocked.bindMounts: "lib.mkForce { }"
   storage.operatorUnlocked.rootIdentity.requirePersistentDisk: "true"
   # Vault enrollment verified by the operator (2026-10-23); the center identity
   # salt requires fail-closed machine authentication.

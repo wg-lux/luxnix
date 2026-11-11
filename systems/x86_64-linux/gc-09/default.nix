@@ -396,54 +396,7 @@
     packages.shared = [ ];
 
     storage.operatorUnlocked = {
-      bindMounts = lib.foldl' lib.recursiveUpdate { } [
-        {
-          "/etc/secrets" = {
-            volume = "luxnix-secrets";
-            directory = "host-secrets";
-          };
-          "/etc/secrets/vault" = {
-            volume = "luxnix-secrets";
-            directory = "managed-secrets";
-          };
-        }
-        (lib.optionalAttrs config.services.postgresql.enable {
-          "/var/lib/postgresql" = {
-            volume = "luxnix-app-storage";
-            directory = "postgresql";
-          };
-        })
-        (lib.optionalAttrs config.services.postgresqlBackup.enable {
-          ${config.services.postgresqlBackup.location} = {
-            volume = "luxnix-app-storage";
-            directory = "postgresql-backups";
-          };
-        })
-        (lib.optionalAttrs config.luxnix.vault.server.enable {
-          ${config.luxnix.vault.server.storagePath} = {
-            volume = "luxnix-app-storage";
-            directory = "vault-data";
-          };
-        })
-        (lib.optionalAttrs config.services.luxnix.lxAnnotateLocal.enable {
-          "/var/lib/lx-annotate-identity-salts" = {
-            volume = "luxnix-secrets";
-            directory = "identity-salt-recovery";
-          };
-          "/var/lib/lx-annotate/data/.identity-salt-recovery" = {
-            volume = "luxnix-secrets";
-            directory = "identity-salt-replica";
-          };
-          "/var/endoreg-service-user/lx-annotate-wheel/conf" = {
-            volume = "luxnix-secrets";
-            directory = "wheel-conf";
-          };
-          "/var/lib/lx-annotate" = {
-            volume = "luxnix-app-storage";
-            directory = "application";
-          };
-        })
-      ];
+      bindMounts = lib.mkForce { };
       enable = true;
       guardedServices = lib.id (
         let
@@ -506,7 +459,7 @@
           }
         )
       );
-      layout = "legacy-containers";
+      layout = "boot-luks";
 
       migration = {
         accountHashes =
@@ -525,30 +478,7 @@
       startupServices = lib.filter (
         name: builtins.elem "multi-user.target" config.systemd.services.${name}.wantedBy
       ) (builtins.attrNames config.luxnix.storage.operatorUnlocked.guardedServices);
-      volumes =
-        lib.recursiveUpdate
-          {
-            luxnix-secrets = {
-              mountPoint = "/var/lib/luxnix-secrets";
-              container = "/var/lib/luxnix-secrets.luks";
-              minimumSizeMiB = 256;
-              noexec = true;
-            };
-          }
-          (
-            lib.optionalAttrs
-              (
-                config.services.luxnix.lxAnnotateLocal.enable
-                || config.services.postgresql.enable
-                || config.luxnix.vault.server.enable
-              )
-              {
-                luxnix-app-storage = {
-                  mountPoint = "/var/lib/luxnix-app-storage";
-                  container = "/var/lib/luxnix-app-storage.luks";
-                };
-              }
-          );
+      volumes = lib.mkForce { };
     };
 
     vault = {
