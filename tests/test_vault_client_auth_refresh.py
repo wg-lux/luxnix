@@ -14,8 +14,38 @@ ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "scripts/vault/refresh-client-auth.sh"
 
 
-@pytest.mark.parametrize("outcome", ["ready", "offline-cached", "auth-rejected"])
-def test_enrollment_status_requires_fresh_authentication(tmp_path, outcome):
+def test_client_authentication_waits_for_vpn_readiness():
+    expression = f'''let
+      f = builtins.getFlake "git+file://{ROOT}";
+      inspect = configuration: let
+        c = configuration.config;
+        auth = c.systemd.services.vault-auth-setup;
+        vpn = "openvpn-${{c.roles.aglnet.client.networkName}}.service";
+      in {{
+        inherit vpn;
+        inherit (auth) after wants;
+        vpnRequires = c.systemd.services.openvpn-aglnet.requires;
+      }};
+      configured = f.nixosConfigurations.gc-10;
+      withoutVpn = configured.extendModules {{ modules = [ {{
+        roles.aglnet.client.enable = f.inputs.nixpkgs.lib.mkForce false;
+      }} ]; }};
+    in {{ configured = inspect configured; withoutVpn = inspect withoutVpn; }}'''
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expression],
+        cwd=ROOT, capture_output=True, text=True, check=True, timeout=180,
+    )
+    cases = json.loads(result.stdout)
+    configured = cases["configured"]
+    assert configured["vpn"] in configured["after"]
+    assert configured["vpn"] in configured["wants"]
+    assert "managed-secrets-setup.service" not in configured["vpnRequires"]
+    without_vpn = cases["withoutVpn"]
+    assert without_vpn["vpn"] not in without_vpn["after"]
+    assert without_vpn["vpn"] not in without_vpn["wants"]
+
+
+def run_condition(tmp_path, auth):
     source = (ROOT / "modules/nixos/luxnix/vault/tools/auth.nix").read_text()
     condition = source.split("  vaultAuthProvisioningConditionScript =", 1)[1]
     script = condition.split("    write_status()", 1)[1].split("    missing=0", 1)[0]
@@ -30,35 +60,108 @@ def test_enrollment_status_requires_fresh_authentication(tmp_path, outcome):
         script = script.replace("${lib.escapeShellArg " + name + "}",
                                 shlex.quote(str(tmp_path / filename)))
     script = script.replace("${pkgs.coreutils}/bin/", "")
+    script = script.replace("${pkgs.systemd}/bin/systemctl", "systemctl")
     script = script.replace("${vaultAuthSetupScript}", "authenticate")
     script = script.replace(
         "${vaultAuthErrorClassifierTool}/bin/luxnix-vault-classify-auth-error",
         "bash " + shlex.quote(str(ROOT / "scripts/vault/classify-auth-error.sh")),
     )
-    (tmp_path / "vault.env").write_text("test-only-stale-env")
-    (tmp_path / "vault.token").write_text("test-only-stale-token")
-    auth = {
-        "ready": "printf fresh > vault.env; printf fresh > vault.token",
-        "offline-cached": "return 0",
-        "auth-rejected": (
-            "echo 'invalid role or secret ID test-only-sensitive' >&2; return 1"
-        ),
-    }[outcome]
-    result = subprocess.run(
+    return subprocess.run(
         ["bash", "-euo", "pipefail", "-c",
+         "systemctl() { echo \"$*\" >> systemctl.log; };\n"
          "authenticate() { " + auth + "; };\n" + script],
         cwd=tmp_path, capture_output=True, text=True,
     )
-    assert result.returncode == int(outcome == "auth-rejected"), result.stderr
+
+
+FRESH = "printf fresh > vault.env; printf fresh > vault.token"
+
+
+# Exit 255 is a temporary failure that systemd retries; exit 1 waits for an operator.
+@pytest.mark.parametrize("outcome, auth, code", [
+    ("ready", FRESH, 0),
+    ("vault-unreachable", "echo 'dial tcp: connection refused' >&2; return 1", 255),
+    ("vault-sealed", "echo 'Vault is sealed' >&2; return 1", 255),
+    ("auth-rejected",
+     "echo 'invalid role or secret ID test-only-sensitive' >&2; return 1", 1),
+    # Success without credentials is never readiness (formerly offline-cached).
+    ("vault-error", "return 0", 1),
+])
+def test_enrollment_status_requires_fresh_authentication(tmp_path, outcome, auth, code):
+    (tmp_path / "vault.env").write_text("test-only-stale-env")
+    (tmp_path / "vault.token").write_text("test-only-stale-token")
+    result = run_condition(tmp_path, auth)
+    assert result.returncode == code, result.stderr
     assert (tmp_path / "enrollment-status").read_text().strip() == outcome
     assert (tmp_path / "vault.env").exists() == (outcome == "ready")
     assert (tmp_path / "vault.token").exists() == (outcome == "ready")
     assert not list(tmp_path.glob(".vault-auth-error.*"))
     assert "test-only-sensitive" not in result.stderr
+    assert (tmp_path / ".recovery-pending").exists() == (code == 255)
+    assert not (tmp_path / "systemctl.log").exists()
     # The unit is declared in config.nix since the vault module split.
     config = (ROOT / "modules/nixos/luxnix/vault/config.nix").read_text()
     unit = config.split("services.vault-auth-setup =", 1)[1]
     assert re.search(r"else\s+vaultAuthProvisioningConditionScript;", unit)
+
+
+def test_recovery_after_outage_restarts_refused_services(tmp_path):
+    refused = "echo 'dial tcp: connection refused' >&2; return 1"
+    outage = run_condition(tmp_path, refused)
+    assert outage.returncode == 255
+    recovered = run_condition(tmp_path, FRESH)
+    assert recovered.returncode == 0, recovered.stderr
+    assert not (tmp_path / ".recovery-pending").exists()
+    assert (tmp_path / "systemctl.log").read_text().split("\n")[0] == (
+        "--no-block --job-mode=fail start default.target"
+    )
+    # A later success without an outage queues nothing again.
+    run_condition(tmp_path, FRESH)
+    assert len((tmp_path / "systemctl.log").read_text().splitlines()) == 1
+
+
+def test_auth_never_reports_offline_success():
+    source = (ROOT / "modules/nixos/luxnix/vault/tools/auth.nix").read_text()
+    setup = source.split("vaultAuthSetupScript =", 1)[1].split(
+        "vaultAuthProvisioningConditionScript =", 1)[0]
+    assert "allowOffline" not in setup
+    assert "write_status offline-cached" not in source
+
+
+def eval_host(host, attribute, wrap=""):
+    expression = f'''
+      let f = builtins.getFlake "git+file://{ROOT}";
+      in {wrap} (f.nixosConfigurations.{host}.config.{attribute})
+    '''
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expression],
+        cwd=ROOT, capture_output=True, text=True, check=True,
+    )
+    return json.loads(result.stdout)
+
+
+@pytest.mark.parametrize("host, offline", [("gc-09", True), ("gc-02", False)])
+def test_vault_outage_is_retried_and_named_not_a_dead_end(host, offline):
+    unit = "systemd.services.vault-auth-setup"
+    config = eval_host(host, f"{unit}.serviceConfig")
+    assert config["Restart"] == "on-failure"
+    assert config["RestartPreventExitStatus"] == "1"
+    assert eval_host(host, f"{unit}.startLimitIntervalSec") == 0
+    secrets = {
+        name: eval_host(host, f"systemd.services.managed-secrets-setup.{name}")
+        for name in ("after", "wants", "requires")
+    }
+    # readFile builds the script, so the assertion reads the deployed text.
+    script = eval_host(
+        host,
+        "systemd.services.managed-secrets-setup.serviceConfig.ExecStart",
+        wrap="builtins.readFile",
+    )
+    assert "vault-auth-setup.service" in secrets["after"]
+    # allowOffline hosts reuse existing secrets and name the blocker meanwhile.
+    assert ("vault-auth-setup.service" in secrets["wants"]) == offline
+    assert ("vault-auth-setup.service" in secrets["requires"]) != offline
+    assert ("BLOCKER: Vault authentication is unavailable" in script) == offline
 
 
 def test_certificate_service_can_resolve_authentication_tools():

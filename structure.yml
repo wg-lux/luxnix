@@ -52,6 +52,9 @@ entrypoints:
   - name: release-provenance
     file: release-artifacts/lx-annotate/1.2.2/manifest.yml
     purpose: Inspect release provenance ownership and interfaces.
+  - name: gc10-pts-recovery-release
+    file: release-artifacts/endoreg-db/1.8.2+luxnix.1/manifest.yml
+    purpose: Pin the gc-10 processed-first presentation timestamp recovery artifact and source evidence.
 dependencies:
   internal: []
   external:

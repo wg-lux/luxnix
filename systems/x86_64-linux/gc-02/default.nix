@@ -609,21 +609,12 @@
       enableUserSlices = true;
     };
 
-    services = {
-      nix-daemon.serviceConfig = {
-        CPUWeight = 25;
-        IOWeight = 25;
-        MemoryHigh = "4G";
-        MemoryMax = "6G";
-        MemorySwapMax = "2G";
-      };
-
-      vault-auth-setup.serviceConfig = {
-        ExecStartPost = "${pkgs.systemd}/bin/systemctl --no-block start lx-annotate.service";
-        Restart = "on-failure";
-        RestartSec = "30s";
-        TimeoutStartSec = "45s";
-      };
+    services.nix-daemon.serviceConfig = {
+      CPUWeight = 25;
+      IOWeight = 25;
+      MemoryHigh = "4G";
+      MemoryMax = "6G";
+      MemorySwapMax = "2G";
     };
 
     slices.user.sliceConfig.ManagedOOMSwap = "kill";

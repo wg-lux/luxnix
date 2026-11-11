@@ -80,11 +80,8 @@ let
             '[inputs] as $credentials | { role_id: $credentials[0], secret_id: $credentials[1] }' \
             > "$TMP_AUTH"
         unset ROLE_ID SECRET_ID
+        # A failed login is never success: the caller classifies it and retries.
         if ! ${pkgs.vault}/bin/vault write -field=token auth/approle/login @"$TMP_AUTH" > "$TMP_TOKEN"; then
-          ${optionalString cfg.client.allowOffline ''
-            echo "WARNING: Vault authentication failed; continuing with locally cached secrets." >&2
-            exit 0
-          ''}
           echo "ERROR: Vault AppRole authentication failed." >&2
           exit 1
         fi
@@ -127,6 +124,9 @@ let
       ${pkgs.coreutils}/bin/chmod 0644 "$temporary"
       ${pkgs.coreutils}/bin/mv -f "$temporary" ${lib.escapeShellArg runtimeStatusFile}
     }
+
+    # Set while temporary failures refuse dependents; cleared by the next success.
+    recovery_marker=${lib.escapeShellArg runtimeDir}/.recovery-pending
 
     missing=0
     ${optionalString (cfg.client.auth.method == "approle") ''
@@ -178,17 +178,34 @@ let
           ;;
       esac
       echo "WARNING: lx-annotate remains fail-closed. Run luxnix-vault-enrollment-status for safe recovery guidance." >&2
+      case "$auth_state" in
+        vault-sealed|vault-unreachable|vault-error)
+          # Temporary: fail (exit 255 also fails an ExecCondition) so systemd retries,
+          # and remember that dependent units were refused meanwhile.
+          ${pkgs.coreutils}/bin/touch "$recovery_marker"
+          echo "Retrying automatically; dependent services start once authentication succeeds." >&2
+          exit 255
+          ;;
+      esac
       echo "After correcting the problem, run: systemctl start vault-auth-setup.service" >&2
       exit 1
     fi
-    if [ -s ${lib.escapeShellArg runtimeEnvironmentFile} ]; then
-      write_status ready
-    else
-      write_status offline-cached
-      echo "WARNING: Vault authentication is unavailable; only explicitly allowed cached artifacts may continue." >&2
+    if [ ! -s ${lib.escapeShellArg runtimeEnvironmentFile} ]; then
+      write_status vault-error
+      echo "ERROR: Vault authentication reported success without credentials; services remain fail-closed." >&2
+      exit 1
     fi
+    write_status ready
     ${pkgs.coreutils}/bin/rm -f "$auth_error"
     trap - EXIT
+    if [ -e "$recovery_marker" ]; then
+      ${pkgs.coreutils}/bin/rm -f "$recovery_marker"
+      # Units refused during the outage stay failed; finish the boot they belong to.
+      # job-mode=fail never replaces a pending shutdown or isolate.
+      if ! ${pkgs.systemd}/bin/systemctl --no-block --job-mode=fail start default.target; then
+        echo "WARNING: could not queue default.target; start dependent services manually." >&2
+      fi
+    fi
   '';
 
   vaultEnrollmentStatusTool = pkgs.writeShellApplication {
@@ -224,7 +241,7 @@ let
           echo "Inspect: journalctl -u vault-auth-setup.service -b"
           ;;
         offline-cached)
-          echo "Vault is not authenticated; only services with an explicit cached-artifact policy may continue."
+          echo "Recorded by an older generation; start vault-auth-setup.service to authenticate again."
           ;;
         *) echo "Inspect: journalctl -u vault-auth-setup.service -b" ;;
       esac

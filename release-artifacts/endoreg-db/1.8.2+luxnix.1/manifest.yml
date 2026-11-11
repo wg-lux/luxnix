@@ -1,0 +1,22 @@
+schema_version: 1
+target_host: gc-10
+application_version: 1.7.7
+backend_version: 1.8.2+luxnix.1
+artifact: endoreg_db-1.8.2+luxnix.1-cp312-cp312-linux_x86_64.whl
+sha256: 803ad9841a30994e01bcec3a377abdd9150ae4294ae58a025566ca86112cdd53
+source:
+  repository: /home/admin/endoreg-db
+  revision: bd6d5d350a59bb6c36328ab5067782e9c489729d
+  patch: source.patch
+  patch_sha256: 886e4d62b922c57098a118ecd8bf76f06486ceb858acc6a4b0e8aed34774ca6b
+contract:
+  identity_verification: import
+  coordinate_authority: decoded presentation timestamps
+  legacy_frame_count: reconcile unannotated rows to decoded sequence
+  original_media: not required for processed timestamp recovery
+  encrypted_media: authenticated scoped materialization required
+verification:
+  pyright: 0 errors, 0 warnings
+  backend_regressions: 36 passed; encrypted real media, import identity reuse, changed
+    frame counts, idempotence, tamper rejection and cleanup
+  vpn_ordering_regression: 1 passed, 20 deselected

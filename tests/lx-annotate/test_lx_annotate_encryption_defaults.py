@@ -144,7 +144,7 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
         'call_command("repair_legacy_migration_history", apply=True)' in config_source
     )
     assert (
-        "exec ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput"
+        "exec ${effectiveRuntimePackage}/bin/lx-annotate-manage backfill_video_timelines --apply"
         in config_source
     )
     assert "ExecStartPre" not in (SERVICE_DIR / "subservices/lx-annotate-migrate.nix").read_text()

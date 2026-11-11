@@ -9,6 +9,9 @@ host_roles:
   endoreg_client.defaultCenterKey: '"university_hospital_wuerzburg"'
 
 host_services:
+  # Recover presentation timestamps directly from the active canonical media.
+  luxnix.lxAnnotateLocal.runtime.wheelDependencyOverrides: >-
+    [ "${../../../release-artifacts/endoreg-db/1.8.2+luxnix.1}/endoreg_db-1.8.2+luxnix.1-cp312-cp312-linux_x86_64.whl" ]
   # Interactive annotation hit CPU throttling and memory reclaim on this 32 GiB host.
   luxnix.lxAnnotateLocal.runtime.limits.cpuQuota: '"200%"'
   luxnix.lxAnnotateLocal.runtime.limits.memoryHigh: '"5G"'

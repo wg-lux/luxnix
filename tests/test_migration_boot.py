@@ -354,6 +354,23 @@ def test_recovery_identity_refusal_prevents_boot_changes(stage, monkeypatch, fai
     assert not (args.esp / "EFI").exists()
 
 
+def test_unmounted_recovery_names_the_fix_and_changes_nothing(stage, monkeypatch):
+    args, variables, calls = stage
+    args.apply = True
+    original = boot.sb.run
+
+    def run(*command):
+        if command[0] == "findmnt" and args.recovery in command:
+            raise boot.sb.SecureBootError("findmnt failed: no error output")
+        return original(*command)
+
+    monkeypatch.setattr(boot.sb, "run", run)
+    with pytest.raises(ValueError, match="Nothing is mounted at .*setup-media"):
+        boot.stage(args)
+    assert "LoaderEntryOneShot" not in variables
+    assert not (args.esp / "EFI").exists()
+
+
 @pytest.mark.parametrize(
     "failure", [None, "digest", "truncated", "oversized", "symlink"]
 )
@@ -1141,6 +1158,13 @@ def kexec_host(tmp_path, monkeypatch, spec):
     monkeypatch.setattr(boot, "require_machine", lambda *a: None)
     monkeypatch.setattr(boot, "NETWORK", tmp_path / "net")
     monkeypatch.setattr(boot, "LOCKDOWN", tmp_path / "lockdown")
+    arp = tmp_path / "arp"
+    arp.write_text(
+        "IP address HW type Flags HW address Mask Device\n"
+        f"192.0.2.1 0x1 0x2 52:54:00:12:01:01 * {spec['interface']}\n"
+    )
+    monkeypatch.setattr(boot, "ARP", arp)
+    monkeypatch.setattr(boot.time, "sleep", lambda s: None)
     monkeypatch.setattr(boot.sb, "private_workspace", private_workspace)
     monkeypatch.setattr(boot.sb, "run", run)
     monkeypatch.setattr(boot.sb, "_require_tty", lambda: None)
@@ -1224,6 +1248,40 @@ def test_kexec_runs_only_on_its_own_host(kexec_host):
     args.host = "another-host"
     with pytest.raises(ValueError, match="target host itself"):
         boot.kexec(args)
+
+
+@pytest.mark.parametrize(
+    "arp_line",
+    [
+        "",  # Nobody ever answered.
+        "192.0.2.1 0x1 0x0 00:00:00:00:00:00 * eth0",
+        "192.0.2.1 0x1 0x2 52:54:00:12:01:01 * wlan0",
+    ],
+)
+def test_kexec_refuses_when_the_controller_is_absent(
+    kexec_host, tmp_path, monkeypatch, arp_line
+):
+    args, calls, _, _ = kexec_host
+    args.apply = True
+    header = "IP address HW type Flags HW address Mask Device\n"
+    (tmp_path / "arp").write_text(header + arp_line)
+    monkeypatch.setattr(boot.socket.socket, "sendto", lambda *a: 0)
+    monkeypatch.setattr("builtins.input", lambda prompt: pytest.fail("asked"))
+    with pytest.raises(ValueError, match="No controller answers at 192.0.2.1 on eth0"):
+        boot.kexec(args)
+    assert calls == []
+    assert not (args.output / "known_hosts").exists()
+
+
+def test_kexec_off_subnet_controller_needs_a_present_gateway(kexec_host, monkeypatch):
+    args, calls, _, spec = kexec_host
+    monkeypatch.setattr(boot.socket.socket, "sendto", lambda *a: 0)
+    remote = spec | {"controller_cidr": "198.51.100.7/32"}
+    with pytest.raises(ValueError, match="outside 192.0.2.0/24 and no gateway"):
+        boot.require_controller_link(remote)
+    with pytest.raises(ValueError, match="No gateway answers at 192.0.2.254"):
+        boot.require_controller_link(remote | {"gateway": "192.0.2.254"})
+    boot.require_controller_link(remote | {"gateway": "192.0.2.1"})
 
 
 @pytest.fixture

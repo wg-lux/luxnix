@@ -165,6 +165,45 @@ def test_schema_compatibility_precedes_migration_and_legacy_repair() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("migration_status", "exit_status", "repairs", "backfill_status"),
+    [(0, 0, 0, 0), (3, 3, 0, 0), (1, 0, 1, 0), (0, 1, 0, 1)],
+)
+def test_pts_failure_does_not_trigger_schema_repair(
+    migration_status: int, exit_status: int, repairs: int, backfill_status: int
+) -> None:
+    source = (MODULE_ROOT / "subservices/lx-annotate-migrate.nix").read_text()
+    script = source.split("set -euo pipefail", 1)[1].split("\n  '';", 1)[0]
+    script = script.replace(
+        "${effectiveRuntimePackage}/bin/lx-annotate-manage", "manage"
+    )
+    # Exercise the actual shell control flow with deterministic command outcomes.
+    script = script.replace("exec manage", "manage")
+    command = f"""
+manage() {{
+  echo "$1"
+  if [ "$1" = backfill_video_timelines ]; then
+    return {backfill_status}
+  fi
+  if [ "$1" = migrate ]; then
+    if [ "${{attempted:-0}}" = 0 ]; then
+      attempted=1
+      return {migration_status}
+    fi
+  fi
+  return 0
+}}
+set -euo pipefail
+{script}
+"""
+    result = subprocess.run(["bash", "-c", command], capture_output=True, text=True)
+    assert result.returncode == exit_status, result.stderr
+    assert result.stdout.splitlines().count("shell") == repairs
+    assert result.stdout.splitlines().count("backfill_video_timelines") == (
+        0 if migration_status == 3 else 1
+    )
+
+
 def test_rendered_guard_ships_filesystem_helper_and_schema_gates() -> None:
     rendered = eval_json(
         """

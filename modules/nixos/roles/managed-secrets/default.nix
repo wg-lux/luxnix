@@ -303,9 +303,21 @@ let
         if [ -s ${lib.escapeShellArg vaultCfg.client.runtimeStatusFile} ]; then
           vault_state="$(${pkgs.coreutils}/bin/cat ${lib.escapeShellArg vaultCfg.client.runtimeStatusFile})"
         fi
-        echo "ERROR: Vault runtime credentials are unavailable (state: $vault_state); managed secrets remain fail-closed." >&2
-        echo "Run luxnix-vault-enrollment-status for recovery guidance." >&2
-        exit 1
+        ${
+          if vaultCfg.client.allowOffline then
+            ''
+              # Not a refusal: existing secrets need no Vault. Name the blocker; any
+              # secret that must be created or refreshed still fails and names itself.
+              echo "BLOCKER: Vault authentication is unavailable (state: $vault_state); reusing existing secrets. vault-auth-setup retries automatically." >&2
+              echo "Run luxnix-vault-enrollment-status for recovery guidance." >&2
+            ''
+          else
+            ''
+              echo "ERROR: Vault runtime credentials are unavailable (state: $vault_state); managed secrets remain fail-closed." >&2
+              echo "Run luxnix-vault-enrollment-status for recovery guidance." >&2
+              exit 1
+            ''
+        }
       fi
     ''}
 
@@ -514,11 +526,18 @@ in
         "systemd-tmpfiles-setup.service"
       ]
       ++ lib.optionals vaultAuthRequired [ "vault-auth-setup.service" ];
-      wants = [ "local-fs.target" ];
+      # Under allowOffline an authentication outage is a named blocker, not a
+      # dependency failure: run with existing secrets while vault-auth-setup retries.
+      wants = [
+        "local-fs.target"
+      ]
+      ++ lib.optionals (vaultAuthRequired && vaultCfg.client.allowOffline) [ "vault-auth-setup.service" ];
       requires = [
         "systemd-tmpfiles-setup.service"
       ]
-      ++ lib.optionals vaultAuthRequired [ "vault-auth-setup.service" ];
+      ++ lib.optionals (vaultAuthRequired && !vaultCfg.client.allowOffline) [
+        "vault-auth-setup.service"
+      ];
 
       serviceConfig = {
         Type = "oneshot";

@@ -21,6 +21,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 
 from lx_administration import secure_boot as sb
@@ -32,6 +33,25 @@ LOADER_GUID = "4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
 def digest(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+RECOVERY_MOUNT_FIX = (
+    "mount the recovery drive at its filesystem root first, for example "
+    "`devenv shell boot-storage-setup setup-media --apply` "
+    "(see docs/migration-environment.md, section 1)"
+)
+
+
+def mounted_filesystems(path: Path, columns: str, fix: str) -> list[dict]:
+    """Return findmnt rows for a mountpoint; an empty mountpoint is a clear error."""
+    try:
+        output = sb.run("findmnt", "--json", "--mountpoint", path, "--output", columns)
+    except sb.SecureBootError:
+        # findmnt exits 1 without diagnostics when nothing is mounted there.
+        if not os.path.ismount(path):
+            raise ValueError(f"Nothing is mounted at {path}; {fix}") from None
+        raise
+    return json.loads(output)["filesystems"]
 
 
 def authorized_key_line(key) -> bool:
@@ -163,16 +183,7 @@ def verify_payload(path: Path, spec: dict) -> None:
 def require_recovery(path: Path, spec: dict) -> None:
     if not path.is_absolute() or path.resolve() != path:
         raise ValueError("Recovery must be an absolute nonsymlinked mountpoint")
-    mounts = json.loads(
-        sb.run(
-            "findmnt",
-            "--json",
-            "--mountpoint",
-            path,
-            "--output",
-            "SOURCE,UUID,FSTYPE,FSROOT",
-        )
-    )["filesystems"]
+    mounts = mounted_filesystems(path, "SOURCE,UUID,FSTYPE,FSROOT", RECOVERY_MOUNT_FIX)
     expected = spec["recovery"]
     if len(mounts) != 1 or any(
         mounts[0].get(k) != v
@@ -405,16 +416,9 @@ def observe_settings(args, selected: str, host: dict) -> dict:
     ]
     if not args.address and len(addresses) != 1:
         raise ValueError("IPv4 address is missing or ambiguous; supply --address")
-    mounts = json.loads(
-        sb.run(
-            "findmnt",
-            "--json",
-            "--mountpoint",
-            recovery,
-            "--output",
-            "SOURCE,UUID,FSTYPE,FSROOT",
-        )
-    )["filesystems"]
+    mounts = mounted_filesystems(
+        recovery, "SOURCE,UUID,FSTYPE,FSROOT", RECOVERY_MOUNT_FIX
+    )
     if len(mounts) != 1 or mounts[0].get("fsroot") != "/":
         raise ValueError("Select a mounted recovery filesystem root")
     mount = mounts[0]
@@ -860,9 +864,9 @@ def stage(args) -> None:
     esp = args.esp
     if not esp.is_absolute() or esp.resolve() != esp:
         raise ValueError("ESP must be an absolute nonsymlinked mountpoint")
-    mount = json.loads(
-        sb.run("findmnt", "--json", "--mountpoint", esp, "--output", "FSTYPE")
-    )["filesystems"]
+    mount = mounted_filesystems(
+        esp, "FSTYPE", "mount the EFI system partition there or pass --esp"
+    )
     if len(mount) != 1 or mount[0]["fstype"] != "vfat":
         raise ValueError("Selected ESP is not a mounted FAT filesystem")
     name = f"luxnix-migration-{args.host}-{args.sha256[:16]}"
@@ -1082,6 +1086,63 @@ def management_link(spec: dict) -> bytes:
     ).encode()
 
 
+ARP = Path("/proc/net/arp")
+ARP_COMPLETE = 0x2
+
+
+def neighbor_present(address: str, interface: str) -> bool:
+    for line in ARP.read_text().splitlines()[1:]:
+        fields = line.split()
+        if (
+            len(fields) >= 6
+            and fields[0] == address
+            and fields[5] == interface
+            and int(fields[2], 16) & ARP_COMPLETE
+        ):
+            return True
+    return False
+
+
+def require_controller_link(spec: dict, attempts: int = 6) -> None:
+    """Refuse a switch that would leave the RAM environment unreachable.
+
+    Only the management interface exists after kexec and SSH is accepted only from
+    controller_cidr, so its next hop (the controller itself, or the gateway) must
+    answer ARP on that interface now. A UDP datagram to the discard port triggers
+    resolution without any controller service or ICMP policy.
+    """
+    network = ipaddress.IPv4Network(spec["controller_cidr"])
+    interface = spec["interface"]
+    subnet = ipaddress.IPv4Interface(spec["address"]).network
+    controller = network.network_address
+    if network.num_addresses == 1 and controller in subnet:
+        hop, role = str(controller), "controller"
+    elif spec.get("gateway"):
+        hop, role = spec["gateway"], "gateway"
+    else:
+        raise ValueError(
+            f"Controller {network} is outside {subnet} and no gateway is set; the "
+            "RAM environment could not reach it. Use --controller-cidr <wired "
+            "controller address>/32 on this subnet or set --gateway"
+        )
+    for attempt in range(attempts):
+        if neighbor_present(hop, interface):
+            return
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            try:
+                probe.sendto(b"", (hop, 9))
+            except OSError:
+                pass
+        if attempt + 1 < attempts:
+            time.sleep(0.5)
+    raise ValueError(
+        f"No {role} answers at {hop} on {interface}; after the switch SSH is "
+        f"accepted only from {network} over {interface}, so nobody could connect. "
+        "Connect the controller to this wired network, or rebuild with "
+        "--controller-cidr <its wired address>/32. Nothing was loaded"
+    )
+
+
 def kexec(args) -> None:
     """Build, then start the RAM environment in place of the running system."""
     host = socket.gethostname().split(".")[0]
@@ -1097,6 +1158,7 @@ def kexec(args) -> None:
     if not spec["authorized_keys"]:
         raise ValueError("Remote access needs administrator SSH keys in the inventory")
     link = management_link(spec)
+    require_controller_link(spec)
     available = int(
         next(
             line.split()[1]

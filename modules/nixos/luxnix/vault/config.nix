@@ -367,8 +367,13 @@ mkIf cfg.enable {
         "vault-auth-setup.service"
         "network-online.target"
       ];
-      requires = [ "vault-auth-setup.service" ];
-      wants = [ "network-online.target" ];
+      # With allowOffline the script keeps a still-valid cached certificate when
+      # authentication is down, so it must run even while vault-auth-setup retries.
+      requires = lib.optionals (!cfg.client.allowOffline) [ "vault-auth-setup.service" ];
+      wants = [
+        "network-online.target"
+      ]
+      ++ lib.optionals cfg.client.allowOffline [ "vault-auth-setup.service" ];
       serviceConfig = {
         Type = "oneshot";
         LimitCORE = 0;
@@ -432,12 +437,17 @@ mkIf cfg.enable {
         "local-fs.target"
         "systemd-tmpfiles-setup.service"
         "network-online.target"
-      ];
+      ]
+      ++ serverVpnServices;
       requires = [ "systemd-tmpfiles-setup.service" ];
       wants = [
         "local-fs.target"
         "network-online.target"
-      ];
+      ]
+      ++ serverVpnServices;
+      # Boot may precede the VPN route to Vault. Temporary failures (exit 255) retry
+      # indefinitely; rejected or missing enrollment material (exit 1) waits for an operator.
+      startLimitIntervalSec = 0;
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -445,6 +455,10 @@ mkIf cfg.enable {
         Group = "root";
         UMask = "0077";
         LimitCORE = 0;
+        Restart = "on-failure";
+        RestartSec = "30s";
+        RestartPreventExitStatus = "1";
+        TimeoutStartSec = "90s";
         ExecCondition = lib.optionals cfg.client.auth.deferUntilProvisioned [
           vaultAuthProvisioningConditionScript
         ];

@@ -156,13 +156,25 @@ or create an empty `vault.env` to move past a state.
 | `vault-unreachable` | Check the VPN route and Vault service. TLS verification stays mandatory. |
 | `auth-rejected` | Vault rejected the AppRole material. Replace it through authenticated delivery. |
 | `vault-error` | Unclassified failure; read `journalctl -u vault-auth-setup.service -b`. |
-| `offline-cached` | No fresh authentication; services with a cached-artifact policy continue. |
+| `offline-cached` | Recorded only by older generations. Start `vault-auth-setup.service` to authenticate again. |
 | `unknown` | `vault-auth-setup.service` has not recorded a state yet. |
 
-Every site in `gpu_client` sets `vault.client.allowOffline = true`. On those
-sites a failed AppRole login is recorded as **`offline-cached`, not
-`auth-rejected`**, and dependent units fail later with errors such as an empty
-hub source-node secret. Read the actual cause with
+### Outages recover by themselves
+
+`vault-auth-setup.service` succeeds only with fresh credentials. When Vault is
+sealed, unreachable or fails unclassified, it records the state and retries every
+30 seconds without limit. Once it succeeds, it starts `default.target` again, so
+services refused during the outage start without manual restarts. A rejected
+AppRole, an untrusted CA or missing enrollment files wait for an operator, since
+retrying cannot fix them.
+
+Every site in `gpu_client` sets `vault.client.allowOffline = true`. There,
+`managed-secrets-setup` reports an outage as a named blocker and reuses the secrets
+already on disk, so applications keep running. A secret that must be created or
+refreshed still needs Vault and fails with its name. The hub client certificate
+service keeps a still-valid cached certificate. Hosts without `allowOffline`
+(for example `gc-02`) wait for authentication before secret setup. Read the cause
+with `sudo luxnix-vault-enrollment-status` or
 `sudo journalctl -u vault-auth-setup.service -b`.
 
 ## Add a new site to the configuration

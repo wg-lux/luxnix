@@ -193,6 +193,7 @@ sudo systemctl status vault-auth-setup.service
 - Other services depend on `managed-secrets-setup.service`
 - Requires `sensitive-service-group` to exist (created by generic-settings)
 - When `luxnix.vault.client` is enabled, `managed-secrets-setup.service` can be ordered after `vault-auth-setup.service` and consume `/run/luxnix/vault/vault.env`
+- With `luxnix.vault.client.allowOffline`, a Vault outage is reported as a named `BLOCKER` and existing secrets are reused; only secrets that must be created or refreshed fail. Without it, the unit requires fresh authentication. `vault-auth-setup.service` retries temporary failures and restarts refused services after recovery ([details](../../../../docs/vault-hub-machine-enrollment.md#outages-recover-by-themselves)).
 
 ## Troubleshooting
 

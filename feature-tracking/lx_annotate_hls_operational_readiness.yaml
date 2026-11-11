@@ -190,16 +190,38 @@ definition_of_done:
       preflight.
     timeout_seconds: 1800
   assessment:
-    status: blocked
+    status: in_progress
     evidence:
     - kind: code
       reference: modules/nixos/services/lx-annotate-local/config.nix:69-84,237-345,570-576
       note: Current attestation combines independent source metadata while installer validation checks
         only the LX-Annotate package version.
-    note: The evaluated gc-10 environment identifies older Endoreg source/dependency versions than the
-      1.1.5 distribution required by its selected LX-Annotate 1.2.0 wheel.
-    assessed_by: codex-gc10-hls-investigate
-    assessed_at: '2026-09-02T09:00:00Z'
+    - kind: code
+      reference: modules/nixos/services/lx-annotate-local/subservices/lx-annotate-migrate.nix
+    - kind: command
+      reference: 'gc-10 Nix evaluation: legacy-containers, migration.enable=false, runtime package 1.7.7,
+        migrate before load-base-data/master-key-check/web; ffmpeg-headless in service path'
+    - kind: command
+      reference: '.venv/bin/python -m pytest -q tests/lx-annotate/test_wheel_downgrade_guard.py: 35 passed'
+    - kind: command
+      reference: 'gc-10 offline Nix evaluation: automaticBackfill=true, layout=legacy-containers, storageMigration=false,
+        version=1.7.7; live pre-upgrade counts for videos 41 and 58 recorded in this assessment'
+    - kind: test
+      reference: 2026-11-11 backend 36 recovery/command + 47 processed-timeline/frame-coordinate tests
+        passed; Pyright 0 errors/0 warnings; LuxNix 36 wheel-guard + 1 VPN ordering regression passed;
+        structure validators and tracker validation passed.
+    note: 2026-11-11 gc-10 persistent native switch is running with candidate /nix/store/h39rp580hgs4inbxjlv2ywbzwwz3dkhn-nixos-system-gc-10-26.05.20261102.7dcdd87.
+      Active system and system profile already agree; boot loader defaults to generation 157. Canonical
+      target source /home/admin/luxnix at 1fd1c66cf3a878acb5edfe9828c0f054859f6ec9 plus reviewed migration/VPN
+      ordering/host artifact patches; flake.lock SHA256 6a85a056a29365a69f40de5db22b661da7a92b59c8902f8fbf0d7e9e99654fd4.
+      App 1.7.7 unchanged; backend hotfix 1.8.2+luxnix.1 pinned only for gc-10 through release-artifacts/endoreg-db/1.8.2+luxnix.1/manifest.yml,
+      wheel SHA256 803ad9841a30994e01bcec3a377abdd9150ae4294ae58a025566ca86112cdd53. Runtime installation
+      succeeded and automatic migration is decoding PTS. User explicitly moved identity verification to
+      import and made PTS authoritative over legacy frame counts; affected videos have no saved frame
+      annotations, boxes, segments or extracted flags. Legacy containers and disabled disk migration preserved.
+      Acceptance remains in progress until backfill, app health and switch exit are verified.
+    assessed_by: codex-pts-backfill-20261110
+    assessed_at: '2026-11-11T07:18:44.852134Z'
 - id: hls_privacy_safe_host_diagnostics
   category: security
   title: WP-LN-05 Host diagnostics are useful without disclosing media identity

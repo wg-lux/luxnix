@@ -1,5 +1,5 @@
 # Purpose: Define only the lx-annotate-migrate.service unit.
-# Command: lx-annotate-manage migrate --noinput, with guarded legacy-history repair on failure.
+# Command: Schema migration with guarded legacy-history repair, then backend PTS backfill.
 { ctx }:
 with ctx;
 let
@@ -8,14 +8,25 @@ let
 
     ${effectiveRuntimePackage}/bin/lx-annotate-manage check_migration_compatibility
     if ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput; then
-      exit 0
+      :
+    else
+      migration_status=$?
+      # LX-Annotate reserves 3 for its post-schema presentation timestamp backfill.
+      if [ "$migration_status" -eq 3 ]; then
+        echo "Video timestamp backfill failed; schema-history repair is not applicable." >&2
+        exit "$migration_status"
+      fi
+
+      echo "Initial migration failed; attempting reviewed legacy migration-history repair." >&2
+      ${effectiveRuntimePackage}/bin/lx-annotate-manage check_migration_compatibility
+      ${effectiveRuntimePackage}/bin/lx-annotate-manage shell --command \
+        'from django.core.management import call_command; call_command("repair_legacy_migration_history", apply=True)'
+      ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput
     fi
 
-    echo "Initial migration failed; attempting reviewed legacy migration-history repair." >&2
-    ${effectiveRuntimePackage}/bin/lx-annotate-manage check_migration_compatibility
-    ${effectiveRuntimePackage}/bin/lx-annotate-manage shell --command \
-      'from django.core.management import call_command; call_command("repair_legacy_migration_history", apply=True)'
-    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput
+    # Required for published wheels predating the application's migration hook.
+    # The backend is idempotent when the application already recovered timelines.
+    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage backfill_video_timelines --apply
   '';
 in
 {
