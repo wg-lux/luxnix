@@ -16,7 +16,7 @@ entrypoints:
     purpose: Refuse unsafe erasure, resume verified fresh installation without formatting or credential replacement and inspect root-only encrypted systems.
   - name: fresh-install-vm
     file: nixtest/fresh_install_vm_test.nix
-    purpose: Exercise the packaged installer, interruption recovery without repeated Disko, encrypted boot and administrator PAM authentication.
+    purpose: Exercise single and multidisk packaged installers, interruption recovery without repeated Disko, secondary key enrollment, encrypted boot and administrator PAM authentication.
   - name: migration-loader-vm
     file: test_migration_loader_vm.py
     purpose: Opt-in disposable QEMU boot of the signed-loader initrd and rejection of corrupted external payloads; no production firmware or root disks.
@@ -37,7 +37,7 @@ entrypoints:
     purpose: Verify fresh installation is the nonmutating default, preservation requires an explicit command, and status never creates or refreshes plans.
   - name: in-place-encryption-vm
     file: nixtest/in_place_encryption_vm_test.nix
-    purpose: Encrypt a real plaintext root with containers, cut power, resume, cold boot and retire containers on disposable disks.
+    purpose: Encrypt independent plaintext root and data filesystems with containers, cut power, resume, cold boot and retire containers on disposable disks.
   - name: secret-preflight-safety
     file: test_secret_preflight.py
     purpose: Verify required secret selection, custody independence, admin password proof and the receipt gate on recovery review.
@@ -92,6 +92,9 @@ entrypoints:
   - name: remote-boot-access
     file: test_remote_boot_access.py
     purpose: Evaluate restricted initrd SSH and verify restored administrator credentials before installation.
+  - name: network-access
+    file: test_network_access.py
+    purpose: Validate the shared CIDR type and role-derived follower and leader allowlists.
   - name: acknowledged-activation
     file: test_activation.py
     purpose: Exercise detached activation acknowledgement, compatibility checks and watchdog recovery.
@@ -234,6 +237,12 @@ entrypoints:
   - name: vault-network-policy
     file: test_vault_network_policy.py
     purpose: Evaluate inventory-derived Vault endpoints, certificate IPs and VPN DNS pinning.
+  - name: hub-secret-fetch
+    file: test_hub_secret_fetch.py
+    purpose: Verify last-accepted-value hub secret delivery, outage tolerance and rejection of stale, empty or denied answers.
+  - name: hub-secret-backend
+    file: test_hub_secret_backend.py
+    purpose: Evaluate hub and site under the vault and openbao backends, declared secret delivery, token hosts and site policy scope.
   - name: ca-trust
     file: test_ca_trust.py
     purpose: Reject distrusted roots in either PEM form and repair or check virtualenv certifi bundles.

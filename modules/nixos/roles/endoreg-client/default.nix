@@ -162,6 +162,10 @@ in
         ];
 
         luxnix = {
+          # Clients only accept management and restricted services from
+          # operators and leaders; leader roles override this tier.
+          networkAccess.tier = lib.luxnix.networkAccess.mkTierDefault "follower";
+
           # Storage settings
           storage.enable = mkDefault true;
           openbao.local.seal = mkDefault "passphrase";

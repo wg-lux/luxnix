@@ -26,6 +26,10 @@ import uuid
 
 from lx_administration import secure_boot as sb
 
+# The recovery drive holds private migration state (POSIX permissions, so no FAT)
+# and is mounted by the loader initrd and the RAM environment.
+RECOVERY_FILESYSTEMS = ("ext4", "btrfs")
+
 MIB = 1024 * 1024
 LOADER_GUID = "4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
 
@@ -126,12 +130,9 @@ def validate_spec(spec: dict) -> None:
     recovery = spec["recovery"]
     if set(recovery) != {"uuid", "fstype", "luks_uuid"}:
         raise ValueError("Unexpected recovery filesystem specification")
-    if recovery["fstype"] not in {"ext4", "vfat"}:
-        raise ValueError("Recovery payload filesystem must be ext4 or FAT")
-    if recovery["fstype"] == "ext4":
-        uuid.UUID(recovery["uuid"])
-    elif not re.fullmatch(r"[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}", recovery["uuid"]):
-        raise ValueError("Select the recovery filesystem UUID")
+    if recovery["fstype"] not in RECOVERY_FILESYSTEMS:
+        raise ValueError("Recovery filesystem must be ext4 or Btrfs")
+    uuid.UUID(recovery["uuid"])
     if recovery["luks_uuid"] is not None:
         uuid.UUID(recovery["luks_uuid"])
     if not spec["target_serials"] or any(
@@ -422,8 +423,8 @@ def observe_settings(args, selected: str, host: dict) -> dict:
     if len(mounts) != 1 or mounts[0].get("fsroot") != "/":
         raise ValueError("Select a mounted recovery filesystem root")
     mount = mounts[0]
-    if mount.get("fstype") not in {"ext4", "vfat"} or not mount.get("uuid"):
-        raise ValueError("Recovery needs ext4 or FAT and a filesystem UUID")
+    if mount.get("fstype") not in RECOVERY_FILESYSTEMS or not mount.get("uuid"):
+        raise ValueError("Recovery needs ext4 or Btrfs and a filesystem UUID")
     nodes = list(
         block_nodes(
             json.loads(
@@ -1261,7 +1262,7 @@ def main(argv=None) -> None:
         "--settings", type=Path, help="Read discovery YAML; explicit flags override it"
     )
     builder.add_argument("--recovery-uuid")
-    builder.add_argument("--recovery-fstype", choices=("ext4", "vfat"))
+    builder.add_argument("--recovery-fstype", choices=RECOVERY_FILESYSTEMS)
     builder.add_argument("--recovery-luks-uuid")
     builder.add_argument("--output", type=Path, required=True)
     builder.add_argument("--sign", action="store_true")

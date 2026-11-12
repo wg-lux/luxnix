@@ -198,6 +198,7 @@ disko.lib.testLib.makeDiskoTest {
         enable = true;
         plaintextRootBridge = plaintextRootTest;
         autoStartProtectedServices = !deferStartupTest;
+        startupServices = [ "writer" ];
         guardedServices.writer = if plaintextRootTest then [ "/home" ] else [ "/srv/data" ];
         remoteUnlock = lib.mkIf remoteUnlockTest {
           enable = true;
@@ -297,7 +298,7 @@ disko.lib.testLib.makeDiskoTest {
         def wait_for_writer():
             if ${if deferStartupTest then "True" else "False"}:
                 machine.fail("systemctl is-active writer.service")
-                machine.succeed("systemctl start writer.service")
+                machine.succeed("luxnix-operator-storage start")
             machine.wait_for_unit("writer.service")
 
         wait_for_writer()
@@ -306,6 +307,7 @@ disko.lib.testLib.makeDiskoTest {
         assert "Started Forward Password Requests to Plymouth." in boot_log, boot_log
         assert "Started Dispatch Password Requests to Console." not in boot_log, boot_log
         machine.fail("test -e /unauthorized-shell-command")
+        machine.succeed("luxnix-operator-storage status; luxnix-operator-storage start")
         machine.succeed("luxnix-verify-boot-storage")
         receipt = machine.succeed("sha256sum /var/lib/luxnix-boot-passphrase/cryptroot.json")
         machine.succeed("luxnix-setup-root-encryption")

@@ -83,8 +83,13 @@ profile alone.
 
 ## Preserve an existing installation
 
-The in-place converter handles one plaintext Btrfs root; the
-[migration reference](boot-storage-migration.md) has the details.
+The in-place converter handles the plaintext Btrfs root and independent Btrfs
+data partitions. The standard setup uses two machines: your controller and the
+target, on one wired network
+([step by step](migration-environment.md#two-machines-the-standard-setup)). If
+`luxnix migrate` stops before planning, it lists the missing configuration;
+[selecting a host](boot-storage-migration.md#selecting-a-host-for-migration)
+explains each item.
 
 1. **Keep credentials safe.** Keep the original credentials, historical keys and
    independent recovery access. Conversion encrypts from now on; older plaintext
@@ -98,8 +103,10 @@ The in-place converter handles one plaintext Btrfs root; the
    confirm. Type `VERIFIED` for completed checks; Enter pauses and keeps progress.
    Saving the plan copies its exact source to
    `/recovery/luxnix-state/sources/<revision>`.
-3. **Convert.** [Stage and boot the RAM migration environment](migration-environment.md),
-   mount the recovery drive at `/recovery`, and run at its console:
+3. **Convert.** Start the RAM environment from your SSH session with
+   `devenv shell migration-boot kexec --apply`, reconnect from the controller on
+   port 2222 ([two-machine steps 4–6](migration-environment.md#two-machines-the-standard-setup)),
+   mount the recovery drive at `/recovery`, and run:
 
    ```sh
    luxnix-migration run --apply
@@ -122,3 +129,30 @@ has started to change, the approvals that started it stay valid until installati
 
 `devenv shell boot-storage-setup` and `devenv tasks run boot-storage:setup` remain
 available as compatibility entry points, with the same explicit approvals.
+
+## gc-10 and independent data disks
+
+Both fresh installation and preservation support independent Btrfs data partitions
+alongside the system disk. gc-10 keeps the existing data partition directly under
+LUKS2 rather than introducing a RAID array. Its deployed inventory remains
+`legacy-containers` until a separately authorized migration and acceptance.
+
+For a fresh or disposable profile, list **every** disk from the evaluated layout
+with its exact by-id path, serial and byte size. A multidisk profile cannot remap
+roles by list order. Erasure approval names every selected serial. After Disko,
+the installer asks for each secondary disk's existing passphrase to enroll a
+random unlock key on encrypted root. Interrupted installation reuses that key;
+`--resume` never formats a disk again. The external Backup export disk is not
+part of this selection and must not be added to the profile.
+
+For preservation, record gc-10's measured hardware UUID and both disks' exact
+by-id paths, serials and byte sizes under `boot_storage.hosts.gc-10` in
+`autoconf/config.yml` if that reviewed profile is absent. Never reuse another
+host's identity. Then use `devenv shell luxnix migrate`. The conversion checks source
+containers and free space on each destination filesystem before beginning a new
+partition, encrypts each partition in place, and copies application data into data
+disk subvolumes. The chosen root recovery passphrase also opens converted data
+partitions; normal boot prompts for root once and opens data with its enrolled
+key. Keep backups and original containers through cold-boot, login, database,
+application and recovery acceptance. Repository checks alone do not establish
+physical gc-10 acceptance.

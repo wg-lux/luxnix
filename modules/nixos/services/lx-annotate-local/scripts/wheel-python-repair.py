@@ -1,8 +1,11 @@
-"""Rebind an existing wheel venv to the configured Python without erasing metadata.
+"""Repair wheel-venv Python or collected CA links without erasing metadata.
 
 Called with the configured interpreter under the wheel installer's flock.
 """
 
+import argparse
+import os
+import ssl
 import sys
 import venv
 from pathlib import Path
@@ -24,5 +27,30 @@ def repair(root: Path) -> None:
     venv.EnvBuilder(with_pip=True, symlinks=True).create(root)
 
 
+def repair_ca_bundle(root: Path, bundle: Path) -> None:
+    """Recover collected certifi store links using the configured system trust."""
+    if not (root / "pyvenv.cfg").is_file():
+        raise RuntimeError("CA repair requires an existing virtual environment")
+    bundle = bundle.resolve(strict=True)
+    ssl.create_default_context(cafile=str(bundle))
+    site = root / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
+    for relative in ("certifi/cacert.pem", "pip/_vendor/certifi/cacert.pem"):
+        path = site / relative
+        if not path.is_symlink() or path.exists():
+            continue
+        if not os.readlink(path).startswith("/nix/store/"):
+            raise RuntimeError("Review the unexpected dangling CA bundle link")
+        pending = path.with_name(".cacert.pem.pending")
+        pending.symlink_to(bundle)
+        pending.replace(path)
+
+
 if __name__ == "__main__":
-    repair(Path(sys.argv[1]))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("root", type=Path)
+    parser.add_argument("--ca-bundle", type=Path)
+    args = parser.parse_args()
+    if args.ca_bundle is not None:
+        repair_ca_bundle(args.root, args.ca_bundle)
+    else:
+        repair(args.root)

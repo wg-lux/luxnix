@@ -35,8 +35,13 @@ def test_keycloak_secret_is_fetched_from_the_shared_vault_path_when_enabled():
     assert secret["path"] == contract["consumerPath"] == "/etc/secrets/vault/keycloak.env"
     assert (secret["owner"], secret["group"], secret["permissions"]) == ("root", "root", "600")
     assert secret["refreshOnBoot"] and secret["customScript"]
-    assert f"-field=client_secret {KV_PATH}" in secret["generator"]
-    assert "Vault returned an empty Keycloak client secret" in secret["generator"]
+    # Shared last-accepted-value fetch: empty or stale answers are rejected there
+    # (tests/test_hub_secret_fetch.py); gc-02 is strict, so no outage tolerance.
+    generator = secret["generator"]
+    assert "fetch_hub_secret.py" in generator
+    assert f"--kv-path {KV_PATH} --field client_secret --strip-newlines" in generator
+    assert '--target "$TARGET_FILE" --previous "$SECRET_FILE"' in generator
+    assert "--tolerate-outage" not in generator
 
 
 def test_keycloak_secret_via_vault_requires_enrolled_machine_auth():

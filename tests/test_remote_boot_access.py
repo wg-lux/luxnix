@@ -34,6 +34,7 @@ def test_remote_unlock_evaluates_restricted_and_retryable():
            ssh = { inherit (c.boot.initrd.network.ssh)
              hostKeys authorizedKeyFiles authorizedKeys extraConfig; };
            crypttab = c.boot.initrd.luks.devices.cryptroot.crypttabExtraOpts;
+           identityCheck = c.system.preSwitchChecks.remoteUnlockIdentity;
            network = { inherit
              (c.boot.initrd.systemd.network.networks."10-luxnix-unlock")
              matchConfig address; };
@@ -60,6 +61,9 @@ def test_remote_unlock_evaluates_restricted_and_retryable():
     assert "ForceCommand " in value["ssh"]["extraConfig"]
     assert "tries=0" in value["crypttab"] and "timeout=0" in value["crypttab"]
     assert value["network"]["matchConfig"]["Name"] == "enp1s0"
+    # A missing identity stops the switch with the command that creates it.
+    assert "/etc/luxnix/initrd-ssh/ssh_host_ed25519_key" in value["identityCheck"]
+    assert "sudo luxnix-setup-remote-unlock" in value["identityCheck"]
     assert any("management client" in message for message in value["rejected"])
 
 

@@ -14,10 +14,49 @@ let
     runtimeTokenFile
     runtimeStatusFile
     serverCfg
+    vaultCli
+    serverUnit
+    serverStoragePath
+    hubSecretFetch
     ;
+  sensitiveGroup = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  siteFqdn = config.luxnix.vault.client.hubPki.commonName;
 in
 {
   enable = mkEnableOption "Enable Default Vault configuration";
+  backend = mkOption {
+    type = types.enum [
+      "vault"
+      "openbao"
+    ];
+    default = "vault";
+    description = ''
+      Secrets server product behind this module. "openbao" runs the hub server as
+      luxnix.openbao (separate /var/lib/openbao state) and makes every client and
+      hub tool call the OpenBao CLI. Options, file handles, unit names of clients
+      and the VAULT_* runtime contract are identical for both. Switch the hub and
+      its sites together with endpoint, CA pin and fresh credentials
+      (docs/hub-secret-delivery.md); the two servers are never both authoritative.
+    '';
+  };
+  clientPackage = mkOption {
+    type = types.package;
+    default = vaultCli;
+    readOnly = true;
+    description = "Package whose bin/vault is the client CLI of the selected backend.";
+  };
+  serverStoragePath = mkOption {
+    type = types.str;
+    default = serverStoragePath;
+    readOnly = true;
+    description = "State directory of the hub secrets server for the selected backend.";
+  };
+  serverUnit = mkOption {
+    type = types.str;
+    default = serverUnit;
+    readOnly = true;
+    description = "systemd unit of the hub secrets server for the selected backend.";
+  };
   dir = mkOption {
     default = "${config.luxnix.generic-settings.secretDir}/vault";
     type = types.str;
@@ -152,6 +191,128 @@ in
           };
           default = { };
           description = "Vault authentication bootstrap for LuxNix systemd services.";
+        };
+        hubSite = mkOption {
+          type = types.submodule {
+            options = {
+              enable = mkEnableOption "the standard hub-site client settings (address, CA pin, credential files, hub PKI)";
+              address = mkOption {
+                type = types.strMatching "https://.+";
+                default = "https://vault.endo-reg.net:8200";
+                description = "Hub secrets server endpoint; becomes client.address.";
+              };
+              auth = mkOption {
+                type = types.enum [
+                  "approle"
+                  "token"
+                ];
+                default = "approle";
+                description = ''
+                  approle: enrollment bundle from luxnix-vault-enroll-hub-site; every fetch logs
+                  in for a short-lived token. token: one renewable per-host token from
+                  luxnix-vault-issue-site-token, installed with luxnix-vault-install-site-token.
+                '';
+              };
+              credentialDirectory = mkOption {
+                type = types.strMatching "/[^[:space:]]+";
+                default = "/etc/secrets/vault/hub-pki";
+                description = "Protected directory holding the CA pin and this host's hub credentials.";
+              };
+            };
+          };
+          default = { };
+          description = ''
+            One-switch site configuration. Sets defaults only; any explicit
+            luxnix.vault.client.* value still wins.
+          '';
+        };
+        secrets = mkOption {
+          type = types.attrsOf (
+            types.submodule (
+              { name, config, ... }:
+              {
+                options = {
+                  scope = mkOption {
+                    type = types.enum [
+                      "shared"
+                      "host"
+                    ];
+                    default = "shared";
+                    description = "shared: one record for every enrolled host. host: a record only this host may read.";
+                  };
+                  kvPath = mkOption {
+                    type = types.strMatching "[A-Za-z0-9_-]+(/[A-Za-z0-9_.-]+)*";
+                    default = if config.scope == "host" then "hosts/${siteFqdn}/${name}" else "shared/${name}";
+                    description = "Path below hubPki.kvMountPath; the default is what enrolled site policies grant.";
+                  };
+                  field = mkOption {
+                    type = types.strMatching "[A-Za-z0-9_.-]+";
+                    default = "value";
+                    description = "KV field holding the secret.";
+                  };
+                  path = mkOption {
+                    type = types.strMatching "/[^[:space:]]+";
+                    default = "/etc/secrets/vault/hub/${name}";
+                    description = "Deployed file handle consumers reference (for example a secretspec *_FILE variable).";
+                  };
+                  owner = mkOption {
+                    type = types.str;
+                    default = "root";
+                    description = "File owner.";
+                  };
+                  group = mkOption {
+                    type = types.str;
+                    default = sensitiveGroup;
+                    description = "File group.";
+                  };
+                  mode = mkOption {
+                    type = types.strMatching "0[0-7]{3}";
+                    default = "0640";
+                    description = "File mode.";
+                  };
+                  stripNewlines = mkOption {
+                    type = types.bool;
+                    default = true;
+                    description = "Remove newlines (single-line secrets). Disable for PEM or multi-line content.";
+                  };
+                  required = mkOption {
+                    type = types.bool;
+                    default = true;
+                    description = "Fail delivery while the hub holds no such record. Optional secrets are skipped until published.";
+                  };
+                  restartUnits = mkOption {
+                    type = types.listOf (types.strMatching "[A-Za-z0-9@_.:-]+\\.(service|target)");
+                    default = [ ];
+                    description = "Units restarted (only if active) after a changed value was deployed; they are ordered after first delivery.";
+                  };
+                };
+              }
+            )
+          );
+          default = { };
+          example = {
+            smtp_password.restartUnits = [ "postfix.service" ];
+          };
+          description = ''
+            Secrets this host fetches from the hub KV with its own scoped token. Publish
+            them on the hub with luxnix-vault-publish-secret. The last accepted value
+            stays deployed while the hub is unreachable or sealed.
+          '';
+        };
+        fetchSecretScript = mkOption {
+          type = types.functionTo types.str;
+          default = hubSecretFetch;
+          readOnly = true;
+          description = ''
+            Builds a roles.managed-secrets customScript generator that fetches one hub KV
+            field ({ name, kvPath, field, stripNewlines ? false, emptyWhenUnavailable ? false })
+            with the selected backend's client and last-accepted-value handling.
+          '';
+        };
+        refreshInterval = mkOption {
+          type = types.str;
+          default = "15min";
+          description = "How often declared hub secrets are re-fetched (systemd time span).";
         };
         hubPki = mkOption {
           type = types.submodule {
@@ -372,6 +533,15 @@ in
                   (compare-and-set) at <kvMountPath>/centers/<key>/identity. Site policies are
                   granted read access to their own center path only. Empty by default; listing
                   a center never replaces an existing secret and never affects other centers.
+                '';
+              };
+              siteTokenPeriod = mkOption {
+                type = types.str;
+                default = "768h";
+                description = ''
+                  Renewal period of per-host tokens issued by luxnix-vault-issue-site-token
+                  for clients using auth.method = "tokenFile". A host that does not renew
+                  within this period loses access and needs a new token.
                 '';
               };
               clientRoleName = mkOption {

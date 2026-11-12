@@ -451,3 +451,41 @@ def test_fresh_children_inherit_global_and_stable_state_locks(recovery, monkeypa
     monkeypatch.setattr(fresh.subprocess, "run", run)
     fresh.install(plan, state, state, apply=True)
     assert [args[0] for args in calls] == ["/disko", "nixos-install"]
+
+
+def test_gc10_both_installation_workflows_evaluate():
+    config = migration.evaluate(Path(__file__).resolve().parents[1], "gc-10")
+    assert len(config["disks"]) == 2
+    assert config["in_place"]["arrays"] == []
+    assert config["in_place"]["secondary"] == [
+        {
+            "name": "luxnix-app-storage",
+            "device": "/dev/disk/by-partlabel/btrfs_data01_p1",
+            "fs_type": "btrfs",
+        }
+    ]
+    assert "/run/media/admin/Backup-24-11" not in config["mounts"]
+    assert (
+        config["mounts"]["/var/lib/lx-annotate"]["device"]
+        == "/dev/mapper/luxnix-app-storage"
+    )
+    migration.validate_in_place(config)
+    fresh.validate_config(config)
+
+
+def test_multidisk_preparation_requires_exact_selection(monkeypatch, tmp_path):
+    import yaml
+
+    value = spec("disposable")
+    profile = tmp_path / "profile.yml"
+    profile.write_text(yaml.safe_dump(value))
+    monkeypatch.setattr(migration, "source_identity", lambda p: {})
+    monkeypatch.setattr(
+        migration,
+        "evaluate",
+        lambda *a: {"disks": {"system": "/dev/system", "data": "/dev/data"}},
+    )
+    monkeypatch.setattr(fresh, "validate_config", lambda c: None)
+    monkeypatch.setattr(migration, "run", lambda *a, **k: pytest.fail("no build"))
+    with pytest.raises(fresh.Error, match="every evaluated"):
+        fresh.prepare(profile)

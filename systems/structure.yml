@@ -13,6 +13,9 @@ entrypoints:
   - name: encrypted-layout
     file: x86_64-linux/encrypted-layout.nix
     purpose: Apply LUKS2 and role-based root, application and secrets mapper names to host-owned partitions or MD arrays; preserve hardware sizing.
+  - name: gc-10-disks
+    file: x86_64-linux/gc-10/disks.nix
+    purpose: Preserve independent system and application Btrfs partitions for fresh installation or in-place LUKS2 conversion without MD reprovisioning.
   - name: gc-10-local-backup-exports
     file: x86_64-linux/gc-10/backup-exports.nix
     purpose: Bind only annotation exports to the operator-authorized local Backup disk with UUID validation and fail-closed automount access.

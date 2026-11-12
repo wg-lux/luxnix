@@ -18,6 +18,7 @@ For exact name-resolution behavior and troubleshooting, use
 | Host-specific network overrides | `ansible/inventory/host_vars` |
 | Autoconf path and subnet options | `autoconf/config.yml` |
 | Generated `/etc/hosts` policy | `modules/nixos/luxnix/generic-settings/network/default.nix` |
+| Client allowlists (management, services, early boot) | `modules/nixos/luxnix/network-access/default.nix`, validated by `lib/network-access/default.nix` |
 | Public and local-only name policy | `docs/network-resolution.md` |
 
 Generated files below `systems/x86_64-linux/` consume these inputs but are not
@@ -92,6 +93,46 @@ Two additional rules prevent ambiguous or unsafe aliases:
 A reviewed service-specific override may intentionally pin a public hostname
 to a private or loopback address. Keep such exceptions next to the service or
 host that requires them and continue to authenticate TLS independently.
+
+## Client allowlists
+
+`luxnix.networkAccess` derives who may reach a host from its trust tier and
+the inventory host map, so allowlists are not copied into each service.
+Roles choose the tier with `lib.luxnix.networkAccess.mkTierDefault`:
+
+| Tier | Set by | Management sources | Service sources |
+| --- | --- | --- | --- |
+| `follower` | `roles.endoreg-client` | operators and leaders | same as management |
+| `leader` | `roles.base-server` (servers, central hub) | operators only | VPN subnet |
+
+The leader priority (900) outranks the follower default (1000), so the hub
+stays a leader although its profile also enables `endoreg-client`. A plain
+host or inventory assignment overrides both.
+
+Inputs, set in shared inventory variables:
+
+- `operatorHosts` and `leaderHosts`: inventory host names, resolved through
+  `generic-settings.network.hosts`. An unknown name or a host without a VPN
+  address fails evaluation.
+- `extraManagementSources`: defaults to `adminVpnIp/32`.
+- `extraEarlyBootSources`: LAN networks for operator machines outside the
+  inventory.
+
+Derived outputs and their consumers:
+
+- `serviceSources` is the default for
+  `services.luxnix.lxAnnotateLocal.remoteAccess.restrictToVpn.allowedClientCidrs`.
+- `earlyBootSources` is the default for
+  `luxnix.storage.operatorUnlocked.remoteUnlock.allowedSources`. Early boot runs
+  before the VPN, so it contains only `ip-local` addresses of trusted hosts in
+  this host's `network-cluster`. When none qualify, remote unlock refuses to
+  evaluate instead of opening a wider range.
+
+Every list uses one validated CIDR type: IPv4 `/16` to `/32` or IPv6 `/48` to
+`/128`, with no host bits set. `0.0.0.0/0`, `10.0.0.0/8`, `172.16.255.5/24` and
+bare addresses are rejected; `lib.luxnix.networkAccess.hostCidr` turns a single
+address into `/32` or `/128`. The Traefik dashboard list and the legacy nginx-host
+configuration do not use this module yet.
 
 ## Change and verification workflow
 

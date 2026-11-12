@@ -43,6 +43,9 @@ entrypoints:
 - name: openbao
   file: openbao.md
   purpose: Isolated hub backend, client compatibility and staged Vault migration gates.
+- name: hub-secret-delivery
+  file: hub-secret-delivery.md
+  purpose: Publish shared and per-host secrets on the hub, token-based host fetch, outage behaviour and the backend switch.
 - name: legacy-storage-recovery
   file: legacy-storage-recovery.md
   purpose: Operating and recovering unmigrated gc-09, gc-10 and gs-02 legacy storage until boot-LUKS acceptance.

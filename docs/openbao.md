@@ -11,6 +11,11 @@ scenario exercised by the VM test below belongs to a retired design. Its KV,
 cert-auth, single-use token and revocation results still apply to hub identity
 provisioning, but not to volume unlock.
 
+`luxnix.vault.backend = "openbao"` makes this module the hub secrets server
+behind the existing `luxnix.vault` server, tools and clients; operation is
+described in [Hub Secret Delivery](hub-secret-delivery.md). The default remains
+Vault, and the migration gates below still decide when a host may switch.
+
 Before enabling the backend through canonical inventory, declare an encrypted
 mount or bind at `/var/lib/openbao`, and supply runtime TLS certificate and key
 paths. The service checks encryption and protected swap before startup, stops
@@ -146,7 +151,7 @@ supported, tested snapshot conversion for these exact versions is established.
 | High | `tpm_release.py` was built as a central volume-key fetcher. Under the current architecture its TPM identity and mTLS transport serve hub enrollment and center salt delivery; volume unlock uses the local OpenBao. | Move identity and transport into the shared client described in the architecture plan. Never reuse a hub identity token for local volume records or application reads. |
 | High, fixed during review | The curl invocation inherited default configuration, and request path/config inputs lacked strict validation. | The current client disables curlrc, validates HTTPS URLs and path components, rejects control characters, and classifies malformed response shapes. Regression tests include a hostile curlrc and injected token directives. |
 | High | `vault-auth-setup` is a one-shot login; AppRole tokens are configured for 1 hour with a 4 hour maximum. | Implement bounded reauthentication before expiry, atomic runtime publication, and consumer credential reload. Test beyond maximum TTL and through a server outage; a renewal-only timer cannot exceed maximum TTL. |
-| High | The current application stack still calls `pkgs.vault` and uses `VAULT_*` runtime files across enrollment, managed secrets and hub PKI. | Add one shared client command/adapter selection and contract-test all consumers against OpenBao before changing inventory. Avoid independent copies of the existing Vault module. |
+| High, source implemented | The application stack called `pkgs.vault` across enrollment, managed secrets and hub PKI. | `luxnix.vault.backend` now selects one client package for every tool and consumer; `tests/test_hub_secret_backend.py` evaluates hub and site under both backends. Live consumer tests against OpenBao (gate 4) remain open. |
 | High, fixed after review | The fetch path previously bypassed TSS2 attribute validation. | It now validates TPM-generated, fixedTPM/fixedParent, sign-only key attributes before network access; plaintext-key rejection is regression-tested. Physical enrollment and system integrity remain separate acceptance requirements. |
 | High | Neither hardware identity nor a TPM-sealed local seal attests root/Nix-store integrity. | Complete ENC-09 before enabling unattended local unlock. Software TPM tests are not hardware acceptance. |
 | Medium | Audit retention, capacity alarms, off-host backups and restore are not operationally established. | Prove audit-full behavior and encrypted off-host restore before the backend owns application secrets. |

@@ -257,6 +257,10 @@ Worker-specific env that is still shared across generated service/script paths
 also lives in `scripts/env.nix`, currently `celeryWorkerResourceEnv` and
 `llmInferenceWorkerEnv`.
 
+All hosts export `REPORT_LLM_DRAFTING_ENABLED` with the same value as `LLM_ENABLED`
+from `runtime.llm.enable` (default `true`), enabling report chat and drafting
+alongside report-import LLM extraction. Host activation is required to apply it.
+
 When adding or changing a shared lx-annotate/secretspec-style variable, update
 `commonEnv` first. Do not add a parallel export block in `config.nix`, a
 subservice, or `scripts.nix`. Small wrapper-only variables can stay in the wrapper that owns

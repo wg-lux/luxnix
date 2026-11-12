@@ -24,7 +24,7 @@ entrypoints:
   purpose: Restrict opt-in scheduled upgrades to reviewed immutable revisions staged for a separate operator reboot.
 - name: boot-storage
   file: luxnix/operator-unlocked-storage/boot.nix
-  purpose: LUKS2 root unlock with no plaintext fallback by default, explicit password setup, secondary crypttab and strict encrypted storage checks.
+  purpose: LUKS2 root unlock with no plaintext fallback by default, explicit password setup, secondary crypttab, layout-aware operator start, opt-in initrd SSH unlock with a one-time host identity command, and strict encrypted storage checks.
 - name: root-storage-guard
   file: luxnix/operator-unlocked-storage/root-guard.nix
   purpose: Publish each generation's root-storage contract and enforce the target-host preflight before activation.
@@ -42,7 +42,10 @@ entrypoints:
   purpose: Require encrypted storage and reject unaccepted unattended unlock for every EndoReg client role consumer.
 - name: openbao
   file: luxnix/openbao/default.nix
-  purpose: Separate opt-in encrypted TLS hub and TPM-sealed local Raft instances.
+  purpose: Separate opt-in encrypted TLS hub and TPM-sealed local Raft instances; the hub also serves luxnix.vault when its backend is openbao.
+- name: network-access
+  file: luxnix/network-access/default.nix
+  purpose: Derive validated management, service and early-boot client allowlists from the role-selected follower or leader tier.
 - name: tpm-release-client
   file: luxnix/tpm-release-client/default.nix
   purpose: Opt-in TPM-bound client identity and release fetch command; not wired into unlock.
@@ -54,10 +57,10 @@ entrypoints:
   purpose: Legacy-container recovery helper; omitted from boot-LUKS systems.
 - name: secure-boot
   file: system/boot/default.nix
-  purpose: Plain-text Plymouth unlock and bootloader selection; keyless lanzaboote install verifying controller-signed artifacts against the public fleet certificate.
+  purpose: Graphical (bgrt) Plymouth unlock splash and bootloader selection; keyless lanzaboote install verifying controller-signed artifacts against the public fleet certificate.
 - name: vault-secret-lifecycle
   file: luxnix/vault/default.nix
-  purpose: Machine authentication, guarded Vault credentials and mount-gated manually unlocked server TLS storage. Wiring only; shared values in context.nix, per-domain scripts in tools/ (auth, server, hub-pki, hub-sites, client), options.nix and config.nix.
+  purpose: Machine authentication, guarded Vault credentials, backend selection (vault or openbao), declared hub secrets with last-accepted-value delivery and mount-gated manually unlocked server TLS storage. Wiring only; shared values in context.nix, per-domain scripts in tools/ (auth, server, hub-pki, hub-sites, client), options.nix and config.nix.
 - name: managed-secret-publication
   file: roles/managed-secrets/default.nix
   purpose: Fail-closed authenticated refresh and encrypted/runtime storage verification.

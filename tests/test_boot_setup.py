@@ -16,6 +16,15 @@ from lx_administration.storage import boot_setup as setup
 from lx_administration.storage import secret_preflight
 from tests import test_boot_migration as migration_tests
 
+LIVE_ROOT_CHECK = setup.live_root_is_luks2
+
+
+@pytest.fixture(autouse=True)
+def plaintext_test_machine(monkeypatch):
+    """Planning stops must not depend on the disk of the machine running tests."""
+    monkeypatch.setattr(setup, "live_root_is_luks2", lambda: False)
+
+
 @pytest.fixture
 def state(tmp_path, monkeypatch):
     root, plan, progress = migration_tests.state.__wrapped__(tmp_path, monkeypatch)
@@ -516,6 +525,78 @@ def test_autoconf_target_reuses_plan_and_blocks_drift(state, tmp_path, monkeypat
         setup.configured_target(config_path, "gc-09")
 
 
+def test_an_unconfigured_host_names_every_missing_step_at_once(tmp_path):
+    from tests.autoconf_test_support import write_config
+
+    config_path = write_config(tmp_path)
+    host_vars = tmp_path / "ansible/inventory/host_vars/gc-10.yml"
+    host_vars.write_text(
+        "host_luxnix:\n"
+        "  storage.operatorUnlocked.layout: '\"legacy-containers\"'\n"
+    )
+    with pytest.raises(migration.MigrationError) as stop:
+        setup.target_spec(config_path, "gc-10")
+    message, fix = str(stop.value), stop.value.fix
+    assert "nothing was planned" in message
+    assert "1. gc-10 is still set to legacy-containers" in message
+    assert "2. gc-10 has no boot storage entry" in message
+    assert str(host_vars) in fix and "autoconf:generate" in fix
+    assert "product_uuid" in fix and "systems/x86_64-linux/gc-10/disks.nix" in fix
+    assert setup.SELECTING_DOC in fix
+
+    # Once the layout is selected, only the missing entry remains.
+    host_vars.write_text(
+        "host_luxnix:\n  storage.operatorUnlocked.layout: '\"boot-luks\"'\n"
+    )
+    with pytest.raises(migration.MigrationError, match="no boot storage entry;"):
+        setup.target_spec(config_path, "gc-10")
+    text = migration.explain_stop(stop.value)
+    assert "Kept: nothing was deleted" in text
+
+
+def test_an_already_encrypted_host_without_a_plan_is_sent_to_inspection(
+    monkeypatch, tmp_path
+):
+    from tests.autoconf_test_support import write_config
+
+    config_path = write_config(tmp_path)
+    monkeypatch.setattr(setup.socket, "gethostname", lambda: "gc-10.example")
+    monkeypatch.setattr(setup, "live_root_is_luks2", lambda: True)
+    for call in (setup.target_spec, lambda c, _host: setup.current_host(c)):
+        with pytest.raises(migration.MigrationError, match="already LUKS2") as stop:
+            call(config_path, "gc-10")
+        assert "luxnix inspect gc-10" in stop.value.fix
+        assert setup.REMOTE_UNLOCK_DOC in stop.value.fix
+    # Another machine's disk says nothing about the named host.
+    monkeypatch.setattr(setup.socket, "gethostname", lambda: "controller")
+    with pytest.raises(migration.MigrationError, match="no boot storage entry"):
+        setup.target_spec(config_path, "gc-10")
+
+
+def test_live_root_detection_needs_a_luks2_parent_and_fails_closed(monkeypatch):
+    def tree(parent):
+        node = {"name": "cryptroot", "type": "crypt", "children": [parent]}
+        return json.dumps({"blockdevices": [node]})
+
+    outputs = {}
+    monkeypatch.setattr(
+        setup.subprocess,
+        "run",
+        lambda command, **k: SimpleNamespace(stdout=outputs[command[0]]),
+    )
+    outputs["findmnt"] = "/dev/mapper/cryptroot\n"
+    outputs["lsblk"] = tree({"fstype": "crypto_LUKS", "fsver": "2"})
+    assert LIVE_ROOT_CHECK()
+    outputs["lsblk"] = tree({"fstype": "crypto_LUKS", "fsver": "1"})
+    assert not LIVE_ROOT_CHECK()
+    outputs["lsblk"] = json.dumps(
+        {"blockdevices": [{"name": "nvme0n1p3", "type": "part", "fstype": "btrfs"}]}
+    )
+    assert not LIVE_ROOT_CHECK()
+    outputs["lsblk"] = "not json"
+    assert not LIVE_ROOT_CHECK()
+
+
 def test_a_started_plan_survives_a_moved_checkout(monkeypatch, tmp_path):
     monkeypatch.setattr(migration, "private_path", lambda *a, **k: None)
     spec = {"host": "gc-09", "checkout": "/release"}
@@ -883,7 +964,7 @@ def test_workflow_pauses_for_notes_then_installer(
     monkeypatch.setattr(setup.os, "geteuid", lambda: 1000)
     setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
     assert calls[-1] == "review"
-    assert "Boot the staged LuxNix migration entry" in capsys.readouterr().out
+    assert "migration-boot kexec" in capsys.readouterr().out
 
 
 def test_workflow_takes_notes_in_the_terminal(workflow_environment, monkeypatch):

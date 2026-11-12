@@ -9,6 +9,7 @@
 let
   cfg = config.luxnix.storage.operatorUnlocked;
   remote = cfg.remoteUnlock;
+  access = (import ../../../../lib/network-access { inherit lib; }).networkAccess;
   unlockCommand = pkgs.writeShellScript "luxnix-root-unlock" ''
     echo 'Enter the disk recovery passphrase. This connection cannot run other commands.'
     # A previous attempt may still be deriving its key when SSH reconnects.
@@ -179,10 +180,100 @@ let
   verifier = storageCommand "luxnix-verify-boot-storage" [ pkgs.btrfs-progs pkgs.cryptsetup ] ''
     exec python3 ${checker}/boot.py ${spec} "$@"
   '';
+  operatorStorage =
+    storageCommand "luxnix-operator-storage"
+      [
+        pkgs.btrfs-progs
+        pkgs.cryptsetup
+        pkgs.systemd
+      ]
+      ''
+        if [ "$EUID" -ne 0 ]; then echo 'Run with sudo.' >&2; exit 1; fi
+        if [ "$#" -ne 1 ]; then
+          echo 'Usage: luxnix-operator-storage start|open|status' >&2; exit 2
+        fi
+        case "$1" in
+          status)
+            exec python3 ${checker}/boot.py ${spec}
+            ;;
+          start|open)
+            # A running system already unlocked root. Verify its actual backing
+            # before allowing secondary keys or protected consumers to be used.
+            python3 ${checker}/boot.py ${storageSpec [ "/" ] [ "/" ] [ ]}
+            ${lib.optionalString (secondary != [ ]) ''
+              systemctl --no-ask-password start ${
+                lib.escapeShellArgs (
+                  map (v: "systemd-cryptsetup@${utils.escapeSystemdPath v.name}.service") secondary
+                )
+              }
+            ''}
+            ${lib.optionalString (dataMounts != [ ]) ''
+              systemctl --no-ask-password start ${lib.escapeShellArgs (map mountUnit dataMounts)}
+            ''}
+            python3 ${checker}/boot.py ${spec}
+            ${lib.optionalString (cfg.startupServices != [ ]) ''
+              if [ "$1" = start ]; then
+                systemctl --no-ask-password start ${
+                  lib.escapeShellArgs (map (name: "${name}.service") cfg.startupServices)
+                }
+              fi
+            ''}
+            echo 'Encrypted root and secondary storage verified.'
+            ;;
+          *) echo 'Usage: luxnix-operator-storage start|open|status' >&2; exit 2 ;;
+        esac
+      '';
   setupPassword = storageCommand "luxnix-setup-boot-password" [ pkgs.cryptsetup ] ''
     exec python3 ${checker}/boot_password.py \
       --device ${lib.escapeShellArg config.boot.initrd.luks.devices.cryptroot.device} "$@"
   '';
+  # Shipped on every boot-LUKS host: the identity must exist before the first
+  # generation that enables remote unlock can install its initrd.
+  setupRemoteUnlock =
+    storageCommand "luxnix-setup-remote-unlock"
+      [
+        pkgs.btrfs-progs
+        pkgs.coreutils
+        pkgs.cryptsetup
+        pkgs.openssh
+      ]
+      ''
+        if [ "$#" -ne 0 ]; then echo 'Usage: sudo luxnix-setup-remote-unlock' >&2; exit 2; fi
+        if [ "$EUID" -ne 0 ]; then echo 'Run with sudo.' >&2; exit 1; fi
+        key=${lib.escapeShellArg remote.hostKey}
+        # The private key is only ever written to verified encrypted root.
+        python3 ${checker}/boot.py ${storageSpec [ "/" ] [ "/" ] [ ]}
+        if [ -L "$key" ]; then
+          echo "$key is a symbolic link; refusing to use it." >&2; exit 1
+        fi
+        if [ -e "$key" ]; then
+          echo "Keeping the existing early-boot host identity: $key"
+        else
+          umask 077
+          mkdir -p "$(dirname "$key")"
+          ssh-keygen -q -t ed25519 -N "" \
+            -C ${lib.escapeShellArg "initrd-unlock@${config.networking.hostName}"} -f "$key"
+          # Only the private key is copied into the initrd.
+          rm -f "$key.pub"
+          sync "$key"
+          echo "Created the early-boot host identity: $key"
+        fi
+        public=$(ssh-keygen -y -P "" -f "$key")
+        case "$public" in
+          'ssh-ed25519 '*) ;;
+          *) echo "$key is not an Ed25519 key; remote unlock would refuse it." >&2; exit 1 ;;
+        esac
+        echo 'Pin this line in known_hosts on every operator computer and jump host:'
+        ${
+          if remote.address == "" then
+            ''echo "[<early-boot address>]:${toString remote.port} $public"''
+          else
+            ''echo "[${lib.head (lib.splitString "/" remote.address)}]:${toString remote.port} $public"''
+        }
+        ${lib.optionalString (!remote.enable) ''
+          echo 'Remote unlock is not enabled in this generation; enable it in the host inventory next.'
+        ''}
+      '';
   setupRoot = storageCommand "luxnix-setup-root-encryption" [ pkgs.btrfs-progs pkgs.cryptsetup ] ''
     usage() {
       echo 'Usage: luxnix-setup-root-encryption [--setup-password]'
@@ -243,9 +334,12 @@ in
       description = "Optional management gateway.";
     };
     allowedSources = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ ];
-      description = "Numeric management client addresses or CIDRs allowed to authenticate.";
+      type = lib.types.listOf access.cidr;
+      # Standalone imports (VM tests) lack the network-access module.
+      default =
+        if options ? luxnix.networkAccess then config.luxnix.networkAccess.earlyBootSources else [ ];
+      defaultText = lib.literalExpression "config.luxnix.networkAccess.earlyBootSources";
+      description = "Management client networks in CIDR notation allowed to authenticate.";
     };
     authorizedKeys = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -428,6 +522,8 @@ in
           verifier
           setupPassword
           setupRoot
+          setupRemoteUnlock
+          operatorStorage
         ];
         systemd.services = lib.mkMerge [
           (lib.listToAttrs (
@@ -513,10 +609,14 @@ in
             message = "Remote unlock requires dedicated Ed25519 operator public keys.";
           }
           {
-            assertion =
-              remote.allowedSources != [ ]
-              && lib.all (s: builtins.match "[0-9a-fA-F.:/]+" s != null) remote.allowedSources;
-            message = "Remote unlock requires explicit numeric management client addresses or CIDRs.";
+            # The option type already rejects malformed or overly broad networks.
+            assertion = remote.allowedSources != [ ];
+            message = ''
+              Remote unlock requires at least one management client network. Add a
+              trusted host with ip-local in this host's network-cluster to
+              luxnix.networkAccess.operatorHosts or leaderHosts, or set
+              luxnix.networkAccess.extraEarlyBootSources.
+            '';
           }
           {
             assertion = remote.hostKey == "/etc/luxnix/initrd-ssh/ssh_host_ed25519_key";
@@ -527,6 +627,14 @@ in
             message = "Specify the verified early-boot management NIC driver modules.";
           }
         ];
+        # Without the identity the initrd cannot be assembled; say how to create it.
+        system.preSwitchChecks.remoteUnlockIdentity = ''
+          if [ ! -s ${lib.escapeShellArg remote.hostKey} ]; then
+            echo 'Remote unlock is enabled, but its early-boot SSH host identity is missing.' >&2
+            echo 'Run: sudo luxnix-setup-remote-unlock, pin the printed key, then repeat.' >&2
+            exit 1
+          fi
+        '';
         boot.initrd = {
           inherit (remote) kernelModules;
           systemd = {

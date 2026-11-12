@@ -32,8 +32,9 @@ load_migration_payload() {
         for target in "$@"; do test "$serial" != "$target" || return 1; done
     done
     case "$recovery_type" in
+        # Read-only without journal or log replay: the drive is never written here.
         ext4) options=ro,noload,nodev,nosuid,noexec ;;
-        vfat) options=ro,nodev,nosuid,noexec ;;
+        btrfs) options=ro,nologreplay,nodev,nosuid,noexec ;;
         *) return 1 ;;
     esac
     mkdir -p "$work/migration-source" || return 1

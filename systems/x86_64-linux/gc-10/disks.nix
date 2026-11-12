@@ -126,7 +126,7 @@ in
         };
       };
 
-      # Legacy filesystem stays untouched; the install target uses one-member MD RAID1.
+      # Preserve the existing partition and Btrfs identity during in-place encryption.
       data_raid01_disk1 = {
         device = dataDisk1Id;
         type = "disk";
@@ -136,29 +136,15 @@ in
             data_part = {
               label = "btrfs_data01_p1"; # GPT Label for the partition
               size = "100%";
-              type = if bootLuks then "FD00" else "8300";
-              content =
-                if bootLuks then
-                  {
-                    type = "mdraid";
-                    name = "application";
-                  }
-                else
-                  dataFilesystem;
+              type = "8300";
+              content = dataFilesystem;
             };
           };
         };
       };
 
     };
-    mdadm = lib.optionalAttrs bootLuks {
-      application = {
-        type = "mdadm";
-        level = 1;
-        metadata = "1.2";
-        content = dataFilesystem;
-      };
-    };
+
   };
 
   # Mark subvolumes needed for boot

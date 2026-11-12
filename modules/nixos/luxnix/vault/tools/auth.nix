@@ -9,6 +9,7 @@ with lib;
 with lib.luxnix;
 let
   inherit (ctx)
+    vaultCli
     cfg
     runtimeDir
     runtimeEnvironmentFile
@@ -81,7 +82,7 @@ let
             > "$TMP_AUTH"
         unset ROLE_ID SECRET_ID
         # A failed login is never success: the caller classifies it and retries.
-        if ! ${pkgs.vault}/bin/vault write -field=token auth/approle/login @"$TMP_AUTH" > "$TMP_TOKEN"; then
+        if ! ${vaultCli}/bin/vault write -field=token auth/approle/login @"$TMP_AUTH" > "$TMP_TOKEN"; then
           echo "ERROR: Vault AppRole authentication failed." >&2
           exit 1
         fi

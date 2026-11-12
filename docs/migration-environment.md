@@ -4,17 +4,151 @@ The RAM environment is a small system that runs entirely in memory, so the root
 disk can be converted while nothing uses it. Starting it changes nothing on its
 own, and the existing boot generations stay.
 
+## Two machines: the standard setup
+
+The standard migration uses two machines on the same wired management network:
+
+| Machine | What it is | What stays there |
+| --- | --- | --- |
+| **Controller** | Your administrator workstation with the LuxNix checkout, for example gc-02 | Your SSH keys, the pinned RAM `known_hosts` file, encrypted custody (`~/.lxv`) and the inventory changes |
+| **Target** | The host being encrypted | Its disks, the recovery drive at `/recovery` and a clean checkout of the same reviewed commit |
+
+Before you start:
+
+- The host is configured for migration: see
+  [selecting a host](boot-storage-migration.md#selecting-a-host-for-migration).
+  `luxnix migrate` lists every missing step at once.
+- Both machines reach each other over **wired** Ethernet without VPN. The RAM
+  environment has no VPN, Wi-Fi or DNS, and it reuses the target's current IPv4
+  address statically.
+- Your administrator SSH keys are in the inventory; the RAM environment accepts
+  only those, only from the controller's address.
+- The recovery drive (ext4 or Btrfs) is attached to the target, on mains power.
+- Someone can reach the target's screen and keyboard for the first cold boot: the
+  installed system asks for the root passphrase on its boot splash, unless
+  [remote SSH root unlock](boot-storage-migration.md#remote-ssh-root-unlock) is
+  configured. Conversion itself needs no one at the target.
+
+Each step names where it runs.
+
+1. **Controller: check the configuration and the connection.**
+
+   ```sh
+   devenv tasks run autoconf:check
+   devenv shell check-connectivity <host>
+   ```
+
+   Commit the reviewed configuration so the target can check out the same commit.
+
+2. **Controller → target: open a session.** Connect over the wired management
+   address, not the VPN, so the RAM environment allows the same controller
+   address later:
+
+   ```sh
+   ssh admin@<target wired address>
+   cd ~/luxnix && git fetch && git checkout <reviewed commit>
+   git status --short    # must print nothing
+   ```
+
+3. **Target: plan, back up and review.** In that SSH session:
+
+   ```sh
+   devenv shell luxnix migrate
+   ```
+
+   It mounts the recovery drive, saves the plan, updates the encrypted backup and
+   asks for the checks only you can confirm. It pauses with *Conversion runs in the
+   RAM environment*. Nothing on the disk has changed yet.
+
+4. **Target: start the RAM environment.**
+
+   ```sh
+   devenv shell migration-boot kexec            # preview; saves the settings
+   devenv shell migration-boot kexec --apply
+   ```
+
+   The preview prints the saved [settings](#2-settings-file); check that
+   `controller_cidr` is your controller's wired address. If your session came over
+   the VPN, add `--controller-cidr <controller wired ip>/32` to both commands.
+   The second command waits for `START RAM <host>`. **Before typing it**, copy the
+   new host key from a second controller terminal:
+
+   ```sh
+   scp admin@<target wired address>:migration-<host>-kexec/known_hosts \
+     ~/migration-<host>.known_hosts
+   ```
+
+   Then type the phrase. The target shuts down cleanly into RAM and your session
+   ends; the disks are not changed.
+
+5. **Controller: connect to the RAM environment** after a minute or two:
+
+   ```sh
+   ssh -o UserKnownHostsFile=~/migration-<host>.known_hosts \
+     -o StrictHostKeyChecking=yes -p 2222 root@<target wired address>
+   ```
+
+   A host-key mismatch means you did not reach the environment you started: stop
+   and investigate.
+
+6. **RAM environment (over SSH): convert.**
+
+   ```sh
+   mkdir -p /recovery
+   mount -o nosuid,nodev /dev/disk/by-uuid/<recovery-uuid> /recovery
+   luxnix-migration run --apply
+   ```
+
+   Type `ENCRYPT IN PLACE` and the passphrases privately. The workflow runs in the
+   tmux session `luxnix-migration`; after a dropped connection, reconnect as in
+   step 5 and run the same command to return to it. Do the
+   [prepared review](boot-storage-migration.md#prepared-review-in-the-ram-environment)
+   in this session when it asks. Stay connected until installation reports the new
+   boot default.
+
+7. **Target: cold boot and unlock.** Power the target off and on, then enter the
+   root passphrase on the boot splash (or over remote unlock, if configured).
+
+8. **Controller → target: accept.** Connect to the installed host as in step 2,
+   test login, sudo and application data, and run `devenv shell luxnix migrate`
+   again to record acceptance. Keep backups and custody.
+
+If kernel lockdown (usually from Secure Boot) refuses `kexec`, replace step 4 with
+the [staged boot entry](#4-stage-then-arm): approve it once at the target's screen,
+then continue from step 5 with the fingerprint shown there.
+
+## One machine at its console (exception)
+
+Use this only when no second machine can reach the target, for example **one
+laptop and an external recovery drive**. Use the staged `local-console` entry.
+Build the complete planned host closure and RAM bundle while the installed
+system still has network access, complete the pre-conversion recovery review, and
+follow steps 1–4 below. Reboot, approve the image at the laptop's screen, and use
+its root shell. Ethernet and SSH are not required for this console path once the
+needed artifacts and independent credentials are local.
+The builder still requires network settings; for a console-only image,
+`--controller-cidr 127.0.0.1/32` prevents remote SSH access. Choose an existing
+interface with `--interface` if route discovery is ambiguous.
+
+Keep the recovery drive attached, mains power connected and the laptop awake.
+After entering RAM, mount the recovery filesystem at `/recovery` if it is not
+already mounted, then use `luxnix-migration run --apply`. After conversion, follow
+the [prepared-review commands](boot-storage-migration.md#prepared-review-in-the-ram-environment)
+on that same screen. Stay in RAM until the install reports the new boot default;
+then cold-boot, unlock and test login locally. Do not select the old plaintext
+generation after root encryption.
+
 ## Getting in
 
-There are two ways to start it. Choose by where you are:
+There are two ways to start the RAM environment:
 
-| | Staged boot entry | `migration-boot kexec` |
+| | `migration-boot kexec` (standard) | Staged boot entry |
 | --- | --- | --- |
-| Use when | You are at the machine | You work remotely |
-| How it starts | Reboot; the firmware takes the one-shot entry ([stage it first](#4-stage-then-arm)) | From the running host, without a reboot ([remote start](#start-without-a-reboot-remote)) |
-| The screen shows | Boot messages, then the approval prompt | Boot messages, then an access screen with the address and SSH fingerprint |
-| At the machine | Type `BOOT UNVERIFIED <host> <revision-prefix>`; a root shell opens on the screen | No login; the screen only shows how to connect |
-| Over SSH | Port 2222 after approval, when administrator keys are configured; check the fingerprint shown on the screen | Port 2222 with the `known_hosts` file the `--apply` run wrote before switching |
+| Use when | You work from the controller | You are at the target's screen, or kexec is blocked |
+| How it starts | From the running host, without a reboot ([remote start](#start-without-a-reboot-remote)) | Reboot; the firmware takes the one-shot entry ([stage it first](#4-stage-then-arm)) |
+| The screen shows | Boot messages, then an access screen with the address and SSH fingerprint | Boot messages, then the approval prompt |
+| At the machine | No login; the screen only shows how to connect | Type `BOOT UNVERIFIED <host> <revision-prefix>`; a root shell opens on the screen |
+| Over SSH | Port 2222 with the `known_hosts` file the `--apply` run wrote before switching | Port 2222 after approval, when administrator keys are configured; check the fingerprint shown on the screen |
 
 Connect from the controller (an address in `controller_cidr`) with:
 
@@ -53,7 +187,10 @@ so the cause can be found.
 - Know where the data backup is and how its restore was tested. A remote backup
   works; the journal, evidence, credentials and checkout still need local storage
   outside the target disks.
-- Mount an independent **ext4 or FAT** filesystem at `/recovery`, at its root.
+- Mount an independent **ext4 or Btrfs** filesystem at `/recovery`, at its root. The
+  migration state needs file permissions, so FAT and exFAT cannot hold it. This is
+  the recovery drive only; the host's own `supportedFilesystems` (for example `nfs`)
+  lists kernel drivers and is unrelated.
 - Have systemd-boot, enough `/boot` space, and physical console or BMC access.
   The target needs Python 3.12+, `objcopy`, `sbverify`, `bootctl`, `findmnt`,
   `lsblk` and `blkid`.
@@ -85,7 +222,7 @@ another file, and a flag such as `--address` overrides one value for one run.
 | `address` | That interface's IPv4 address and prefix (`--address`) | A stable address: the RAM environment uses it statically |
 | `gateway` | The default route's gateway (`--gateway`), or `null` | Needed only when the controller is on another subnet |
 | `controller_cidr` | Only `--controller-cidr` | The address SSH may come from, usually one `/32` |
-| `recovery_uuid`, `recovery_fstype` | The filesystem mounted at `/recovery` (`--recovery` for another mount) | ext4 or FAT, at the drive's root |
+| `recovery_uuid`, `recovery_fstype` | The filesystem mounted at `/recovery` (`--recovery` for another mount) | ext4 or Btrfs, at the drive's root |
 | `recovery_luks_uuid` | The LUKS layer below that filesystem, or `null` | Present when the recovery drive is encrypted |
 
 A settings file must hold exactly these keys, with `host` and `hardware_uuid`
@@ -151,6 +288,11 @@ mkdir -p /recovery    # images built before 2026-11-11 lack this directory
 mount -o nosuid,nodev /dev/disk/by-uuid/<recovery-uuid> /recovery
 luxnix-migration run --apply
 ```
+
+At **Access is prepared**, pause for the
+[prepared review](boot-storage-migration.md#prepared-review-in-the-ram-environment).
+It gives the exact commands and expected results for all four assessments; `lsblk`
+alone does not verify the boot artifacts, recovery credential or password receipt.
 
 `luxnix-migration` finds this host's saved plan, checks the plan's source copy in
 `/recovery/luxnix-state/sources/<revision>` against its revision and `flake.lock`,

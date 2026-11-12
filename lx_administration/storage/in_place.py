@@ -12,7 +12,7 @@ An interrupted conversion is resumed from the LUKS2 header, never restarted.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
 import json
 import os
@@ -287,7 +287,9 @@ def mount_target(mounts: dict, root: Path) -> None:
         run(*command, entry["device"], str(target))
 
 
-def consolidate_target(source: Path, destination: Path, marker: Path) -> None:
+def consolidate_target(
+    source: Path, destination: Path, marker: Path, *, subvolume: bool = False
+) -> None:
     """Copy, compare, then publish, so an interruption never leaves half a directory."""
     staging = destination.with_name(destination.name + ".consolidating")
     aside = destination.with_name(destination.name + ".pre-consolidation")
@@ -296,7 +298,13 @@ def consolidate_target(source: Path, destination: Path, marker: Path) -> None:
         run("rm", "-rf", "--one-file-system", str(staging))
     if destination.exists() and any(destination.iterdir()) and aside.exists():
         raise InPlaceError(f"{aside} already exists; inspect it, do not overwrite")
-    run("cp", "-a", "--preserve=all", str(source), str(staging), timeout=None)
+    if subvolume:
+        run("btrfs", "subvolume", "create", str(staging))
+        run(
+            "cp", "-a", "--preserve=all", str(source) + "/.", str(staging), timeout=None
+        )
+    else:
+        run("cp", "-a", "--preserve=all", str(source), str(staging), timeout=None)
     run("diff", "-r", "--no-dereference", str(source), str(staging), timeout=None)
     run("sync")
     if destination.is_dir() and not any(destination.iterdir()):
@@ -337,7 +345,9 @@ def consolidate_containers(
     return done
 
 
-def retire_containers(containers: list[dict], binds: dict) -> list[str]:
+def retire_containers(
+    containers: list[dict], binds: dict, mounts: dict | None = None
+) -> list[str]:
     """Delete container files once their data lives on the encrypted root."""
     for container in containers:
         path = Path(container["container"])
@@ -346,7 +356,21 @@ def retire_containers(containers: list[dict], binds: dict) -> list[str]:
         for target in bind_sources(container, binds):
             marker = CONSOLIDATION_STATE / target.strip("/").replace("/", "__")
             content = Path(target)
-            if not marker.exists() or not content.is_dir() or os.path.ismount(content):
+            if mounts and target in mounts:
+                from lx_administration.storage import boot
+
+                entry = mounts[target]
+                boot.verify_mount(
+                    target,
+                    entry["device"],
+                    entry["fsType"],
+                    next(
+                        (o for o in entry["options"] if o.startswith("subvol=")), None
+                    ),
+                )
+            elif os.path.ismount(content):
+                raise InPlaceError(f"{target} is still a legacy mount; keeping {path}")
+            if not marker.exists() or not content.is_dir():
                 raise InPlaceError(
                     f"{target} was not consolidated onto the encrypted root; "
                     f"keeping {path}"
@@ -379,6 +403,195 @@ def write_boot_receipt(device: str, passphrase: bytes, root: Path) -> None:
     )
 
 
+def enroll_secondary_keys(
+    volumes: list[dict], root: Path, passphrase: bytes | None = None
+) -> None:
+    """Keep data keys on encrypted root; reuse and verify them after interruption."""
+    from lx_administration.storage import boot
+
+    for volume in volumes:
+        device = volume["device"]
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", volume["name"]):
+            raise InPlaceError("Unsafe secondary mapping name")
+        key = root / "etc/luks-keys" / f"{volume['name']}.key"
+        if key.resolve() != key:
+            raise InPlaceError("Secondary key path contains a symbolic link")
+        boot.encrypted_storage(key)
+        key.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if not key.exists():
+            fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(os.urandom(64))
+                stream.flush()
+                os.fsync(stream.fileno())
+        boot.verify_key(str(key))
+        value = key.read_bytes()
+        if len(value) != 64:
+            raise InPlaceError("Secondary key must contain 64 random bytes")
+        if not boot_password.accepts(device, value):
+            credential = (
+                passphrase
+                if passphrase is not None
+                else boot_password.secret(
+                    f"Existing disk passphrase for {volume['name']}: "
+                )
+            )
+            with_key(credential, "luksAddKey", device, str(key))
+        if not boot_password.accepts(device, value):
+            raise InPlaceError("Secondary key enrollment did not verify")
+
+
+def filesystem_owner(mounts: dict, path: str) -> str:
+    return max(
+        (m for m in mounts if m == "/" or path == m or path.startswith(m + "/")),
+        key=len,
+    )
+
+
+@contextmanager
+def volume_tops(volumes: list[dict], passphrase: bytes):
+    """Mount each independent filesystem once, including partially converted plans."""
+    with ExitStack() as stack:
+        tops = {}
+        for volume in volumes:
+            device = volume["device"]
+            if root_state(device) != PLAINTEXT:
+                name = "luxnix-inspect-" + volume["name"]
+                with_key(
+                    passphrase, "open", "--type", "luks2", "--readonly", device, name
+                )
+                stack.callback(run, "cryptsetup", "close", name)
+                device = f"/dev/mapper/{name}"
+            top = stack.enter_context(mounted(device, "ro", "subvolid=5"))
+            # Resizing a multi-device Btrfs filesystem would require a different plan.
+            if not re.search(
+                r"Total devices\s+1\b", run("btrfs", "filesystem", "show", str(top))
+            ):
+                raise InPlaceError(
+                    "In-place conversion requires one Btrfs member per volume"
+                )
+            tops[f"/dev/mapper/{volume['name']}"] = top
+        yield tops
+
+
+def preflight_volumes(
+    volumes: list[dict],
+    layout: dict,
+    mounts: dict,
+    passphrase: bytes,
+    container_passphrases: dict[str, bytes],
+) -> None:
+    with volume_tops(volumes, passphrase) as tops:
+        needed = {device: 0 for device in tops}
+        for container in layout["containers"]:
+            owner = filesystem_owner(mounts, container["container"])
+            top = tops[mounts[owner]["device"]]
+            path = top / subvolume_path(mounts, container["container"])
+            if not path.is_file():
+                raise InPlaceError(f"Missing container: {container['container']}")
+            with opened_container(
+                path, container, container_passphrases[container["name"]]
+            ) as point:
+                for target, bind in bind_sources(container, layout["binds"]).items():
+                    source = point / bind["directory"]
+                    if not source.is_dir():
+                        raise InPlaceError(f"Missing container directory for {target}")
+                    device = mounts[filesystem_owner(mounts, target)]["device"]
+                    needed[device] += int(run("du", "-sb", str(source)).split()[0])
+        for device, top in tops.items():
+            if free_bytes(top) < needed[device] + SPACE_MARGIN:
+                raise InPlaceError(
+                    "A destination filesystem lacks space to retain its containers "
+                    "and copied data"
+                )
+
+
+def convert_multiple(
+    layout: dict,
+    mounts: dict,
+    passphrase: bytes,
+    container_passphrases: dict[str, bytes],
+    root: Path,
+) -> dict:
+    volumes = [
+        {"name": "cryptroot", "device": layout["root_device"]},
+        *layout["secondary"],
+    ]
+    # Finish interrupted reencryptions before mounting their filesystem; never start
+    # another plaintext partition until all readable sources and capacities pass.
+    for volume in volumes:
+        if root_state(volume["device"]) == ENCRYPTING:
+            encrypt(volume["device"], passphrase, resume=True)
+    if any(root_state(v["device"]) == PLAINTEXT for v in volumes):
+        preflight_volumes(volumes, layout, mounts, passphrase, container_passphrases)
+    for volume in volumes:
+        device = volume["device"]
+        if root_state(device) == PLAINTEXT:
+            check_passphrase(passphrase)
+            identity = filesystem_uuid(device)
+            shrink_filesystem(device)
+            encrypt(device, passphrase, resume=False)
+            with volume_tops([volume], passphrase):
+                if (
+                    filesystem_uuid(f"/dev/mapper/luxnix-inspect-{volume['name']}")
+                    != identity
+                ):
+                    raise InPlaceError("Filesystem identity changed during encryption")
+    for volume in volumes:
+        if root_state(volume["device"]) != ENCRYPTED:
+            raise InPlaceError("Encryption did not complete; rerun to resume it")
+        with_key(
+            passphrase, "open", "--type", "luks2", volume["device"], volume["name"]
+        )
+    # Consolidate below the filesystem top levels before mounting the target graph.
+    # This permits new application subvolumes without copying data onto system root.
+    with ExitStack() as stack:
+        tops = {
+            f"/dev/mapper/{v['name']}": stack.enter_context(
+                mounted(f"/dev/mapper/{v['name']}", "subvolid=5")
+            )
+            for v in volumes
+        }
+        root_top = tops["/dev/mapper/cryptroot"]
+        state = root_top / subvolume_path(mounts, str(CONSOLIDATION_STATE))
+        by_name = {c["name"]: c for c in layout["containers"]}
+        for target in sorted(layout["binds"], key=lambda t: t.count("/")):
+            bind = layout["binds"][target]
+            container = by_name[bind["volume"]]
+            marker = state / target.strip("/").replace("/", "__")
+            if marker.exists():
+                continue
+            source_top = tops[
+                mounts[filesystem_owner(mounts, container["container"])]["device"]
+            ]
+            destination_top = tops[mounts[filesystem_owner(mounts, target)]["device"]]
+            path = source_top / subvolume_path(mounts, container["container"])
+            destination = destination_top / subvolume_path(mounts, target)
+            if path.resolve() != path or destination.resolve() != destination:
+                raise InPlaceError(
+                    "Consolidation paths must not contain symbolic links"
+                )
+            with opened_container(
+                path, container, container_passphrases[container["name"]]
+            ) as point:
+                consolidate_target(
+                    point / bind["directory"],
+                    destination,
+                    marker,
+                    subvolume=target in mounts,
+                )
+    erased, unchecked = erase_plaintext_swap(layout["swap_partitions"])
+    mount_target(mounts, root)
+    enroll_secondary_keys(layout["secondary"], root, passphrase)
+    write_boot_receipt(layout["root_device"], passphrase, root)
+    return {
+        "filesystem_uuid": filesystem_uuid("/dev/mapper/cryptroot"),
+        "consolidated": list(layout["binds"]),
+        "swap_erased": erased,
+        "swap_unchecked": unchecked,
+    }
+
+
 def convert(
     layout: dict,
     mounts: dict,
@@ -388,6 +601,10 @@ def convert(
     root: Path = Path("/mnt"),
 ) -> dict:
     """Run or resume the conversion and leave the encrypted target mounted at root."""
+    if layout.get("secondary"):
+        return convert_multiple(
+            layout, mounts, root_passphrase, container_passphrases, root
+        )
     device = layout["root_device"]
     state = root_state(device)
     containers = layout["containers"]

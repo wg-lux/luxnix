@@ -16,6 +16,9 @@ entrypoints:
   - name: module
     file: module/default.nix
     purpose: Inspect module ownership and interfaces.
+  - name: network-access
+    file: network-access/default.nix
+    purpose: Pure CIDR allowlist validation and trust-tier priorities, also importable by path outside the flake.
   - name: toc-generator
     file: toc-generator/generate-toc.py
     purpose: Inspect toc generator ownership and interfaces.

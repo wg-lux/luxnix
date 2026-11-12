@@ -22,7 +22,7 @@ entrypoints:
   purpose: Validate backend authentication compatibility in the wheel entrypoint before starting application code; failures abort startup.
 - name: wheel-python-repair
   file: scripts/wheel-python-repair.py
-  purpose: Rebind the wheel virtualenv to configured Python while preserving downgrade evidence.
+  purpose: Rebind configured Python or repair collected certifi CA links using system trust while preserving downgrade evidence.
 - name: identity-salt-enrollment
   file: subservices/lx-annotate-identity-salts.nix
   purpose: Package the shared storage verifier, preserve local generations and enroll managed center salts.

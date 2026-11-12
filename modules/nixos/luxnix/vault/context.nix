@@ -15,6 +15,22 @@ let
   runtimeTokenFile = "${runtimeDir}/vault.token";
   runtimeStatusFile = "${runtimeDir}/enrollment-status";
   clientReissueMarker = "${runtimeDir}/force-client-reissue";
+  # One client contract for both servers: OpenBao's CLI reads the same VAULT_*
+  # variables and KV/PKI/AppRole commands, so every tool keeps calling `vault`.
+  openbaoBackend = cfg.backend == "openbao";
+  vaultCli =
+    if openbaoBackend then
+      pkgs.runCommand "luxnix-openbao-vault-cli" { } ''
+        mkdir -p "$out/bin"
+        ln -s ${lib.getExe pkgs.openbao} "$out/bin/vault"
+      ''
+    else
+      pkgs.vault;
+  serverUnitName = if openbaoBackend then "openbao" else "vault";
+  serverUnit = "${serverUnitName}.service";
+  # OpenBao never opens the Vault Raft directory; its state is a separate mount.
+  serverStoragePath = if openbaoBackend then "/var/lib/openbao" else toString cfg.server.storagePath;
+  hubSecretStateDir = "/var/lib/luxnix-hub-secrets";
   vaultAuthEnabled = cfg.enable && cfg.client.enable && cfg.client.auth.method != "none";
   verifySecretStorage = pkgs.writeShellScript "verify-vault-secret-storage" ''
     export PATH=${lib.makeBinPath [ pkgs.util-linux ]}:"$PATH"
@@ -60,6 +76,12 @@ in
 {
   inherit
     cfg
+    openbaoBackend
+    vaultCli
+    serverUnitName
+    serverUnit
+    serverStoragePath
+    hubSecretStateDir
     adminName
     runtimeDir
     runtimeEnvironmentFile

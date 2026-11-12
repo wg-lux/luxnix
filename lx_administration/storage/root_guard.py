@@ -96,6 +96,31 @@ def closure_path(system: str, root: Path) -> Path:
     return under(root, system)
 
 
+def contract_path(system: str, root: Path) -> Path:
+    """Resolve both absolute store links without escaping the prepared root."""
+    etc = resolve_under(root, closure_path(system, root) / "etc")
+    return resolve_under(root, etc / "luxnix/root-storage.json")
+
+
+def legacy_storage_overrides(root: Path) -> list[Path]:
+    """Find retained container units that would shadow directories on boot LUKS."""
+    control = under(root, "/etc/systemd/system.control")
+    found = set()
+    for path in control.glob("*.mount"):
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line.startswith("What="):
+                continue
+            source = line.removeprefix("What=").strip()
+            if source in {"/dev/mapper/luxnix-secrets", "/dev/mapper/luxnix-app-storage"} or source.startswith(
+                ("/var/lib/luxnix-secrets/", "/var/lib/luxnix-app-storage/")
+            ):
+                found.add(path)
+    for name in ("90-luxnix-secret-storage.conf", "91-luxnix-app-storage.conf"):
+        found.update(control.glob(f"*.d/{name}"))
+    return sorted(found)
+
+
 def probe_luks(partition: str) -> dict | None:
     raw = run("cryptsetup", "luksDump", "--dump-json-metadata", partition)
     if raw is None:

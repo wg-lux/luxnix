@@ -975,6 +975,73 @@ def test_closure_in_target_store_must_be_registered(tmp_path, monkeypatch):
     ]
 
 
+@pytest.mark.parametrize("invalid_receipt", [False, True])
+def test_root_contract_in_target_store_follows_etc_and_file_links(
+    tmp_path, monkeypatch, invalid_receipt
+):
+    from lx_administration.storage import root_guard
+
+    closure = "/nix/store/" + "c" * 32 + "-nixos-system-host"
+    system = tmp_path / closure.lstrip("/")
+    etc = tmp_path / "nix/store/etc-package/etc"
+    etc.mkdir(parents=True)
+    system.mkdir()
+    (system / "etc").symlink_to("/nix/store/etc-package/etc")
+    (etc / "luxnix").mkdir()
+    contract = tmp_path / "nix/store/root-contract.json"
+    contract_spec = {"layout": "boot-luks", "bootloader": {"esp": "/boot"}}
+    contract.write_text(json.dumps(contract_spec))
+    (etc / "luxnix/root-storage.json").symlink_to("/nix/store/root-contract.json")
+
+    def observe(spec, *, root, system):
+        assert spec == contract_spec and root == tmp_path
+        assert system == closure
+        return {"luks": {"uuid": "test-uuid"}, "partition": "/dev/test-root"}
+
+    def assess(spec, seen, **kwargs):
+        assert kwargs["require_receipt"] and kwargs["first_install"]
+        return [root_guard.Finding("recovery-credential", "stale receipt")] if invalid_receipt else []
+
+    monkeypatch.setattr(root_guard, "observe", observe)
+    monkeypatch.setattr(root_guard, "assess", assess)
+    plan = {"config": {"closure": closure}}
+    if invalid_receipt:
+        with pytest.raises(migration.MigrationError, match="stale receipt"):
+            migration.verify_root_guard(plan, tmp_path)
+    else:
+        assert migration.verify_root_guard(plan, tmp_path) == {
+            "luks_uuid": "test-uuid", "partition": "/dev/test-root"
+        }
+        from lx_administration.storage import migration_boot
+
+        def hand_over(root, esp, system):
+            assert (root, esp, system) == (tmp_path, tmp_path / "boot", closure)
+            return "nixos-generation-42.conf"
+
+        monkeypatch.setattr(migration_boot, "hand_over_boot", hand_over)
+        assert migration.hand_over_boot(plan, tmp_path) == "nixos-generation-42.conf"
+
+
+@pytest.mark.parametrize("relative,contents", [
+    ("old.mount", "[Mount]\nWhat=/dev/mapper/luxnix-secrets\nWhere=/var/lib/luxnix-secrets\n"),
+    ("bind.mount", "[Mount]\nWhat=/var/lib/luxnix-app-storage/application\nWhere=/var/lib/lx-annotate\n"),
+    ("lx-annotate.service.d/90-luxnix-secret-storage.conf", "[Unit]\nBindsTo=etc-secrets-vault.mount\n"),
+    ("postgresql.service.d/91-luxnix-app-storage.conf", "[Unit]\nAssertPathIsMountPoint=/var/lib/postgresql\n"),
+])
+def test_install_refuses_stale_container_overrides_before_boot_contract(tmp_path, relative, contents):
+    from lx_administration.storage import root_guard
+
+    control = tmp_path / "etc/systemd/system.control"
+    stale = control / relative
+    stale.parent.mkdir(parents=True)
+    stale.write_text(contents)
+    (control / "unrelated.mount").write_text("[Mount]\nWhat=/dev/mapper/other-data\n")
+    assert root_guard.legacy_storage_overrides(tmp_path) == [stale]
+    with pytest.raises(migration.MigrationError, match="Legacy container mount overrides"):
+        migration.verify_root_guard({"config": {"closure": "/unused"}}, tmp_path)
+    assert stale.read_text() == contents
+
+
 def test_unproven_boot_handover_leaves_install_interrupted(
     install_environment, monkeypatch
 ):

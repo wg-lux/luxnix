@@ -43,8 +43,9 @@ if (( (8#$directory_mode & 8#077) != 0 )); then
   echo "ERROR: output directory must not be accessible by group or other users (mode 0700 or stricter)." >&2
   exit 1
 fi
-if systemctl is-active --quiet vault.service; then
-  echo "ERROR: vault.service is active. Stop it during an approved outage before taking the archive." >&2
+server_unit="${VAULT_SERVER_UNIT:-vault.service}"
+if systemctl is-active --quiet "$server_unit"; then
+  echo "ERROR: $server_unit is active. Stop it during an approved outage before taking the archive." >&2
   exit 1
 fi
 if [[ ! -d "$VAULT_STORAGE_PATH" ]] || [[ ! -f "$VAULT_TLS_CA_FILE" ]]; then

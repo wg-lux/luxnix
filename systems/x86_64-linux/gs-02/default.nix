@@ -563,9 +563,9 @@ lib.foldl' lib.recursiveUpdate
             };
           })
           (lib.optionalAttrs config.luxnix.vault.server.enable {
-            ${config.luxnix.vault.server.storagePath} = {
+            ${config.luxnix.vault.serverStoragePath} = {
               volume = "luxnix-app-storage";
-              directory = "vault-data";
+              directory = if config.luxnix.vault.backend == "openbao" then "openbao-data" else "vault-data";
             };
           })
           (lib.optionalAttrs config.services.luxnix.lxAnnotateLocal.enable {
@@ -632,8 +632,11 @@ lib.foldl' lib.recursiveUpdate
             ) (_: database ++ [ config.services.postgresqlBackup.location ])
           )
           // lib.optionalAttrs config.luxnix.vault.server.enable {
-            vault = secrets ++ [ config.luxnix.vault.server.storagePath ];
+            ${lib.removeSuffix ".service" config.luxnix.vault.serverUnit} = secrets ++ [
+              config.luxnix.vault.serverStoragePath
+            ];
           }
+          // lib.optionalAttrs (config.luxnix.vault.client.secrets != { }) { luxnix-hub-secrets = secrets; }
           // lib.optionalAttrs (config.luxnix.vault.enable && config.luxnix.vault.client.hubPki.enable) {
             luxnix-vault-issue-hub-client-certificate = secrets ++ lib.optionals app.enable application;
           }

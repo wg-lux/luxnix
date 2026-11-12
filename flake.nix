@@ -269,10 +269,22 @@
           inherit (inputs) disko;
           repoRoot = ./.;
         };
+        boot-storage-fresh-multidisk = import ./tests/nixtest/fresh_install_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          inherit (inputs) disko;
+          repoRoot = ./.;
+          multidisk = true;
+        };
         boot-storage-in-place = import ./tests/nixtest/in_place_encryption_vm_test.nix {
           pkgs = inputs.nixpkgs.legacyPackages.${system};
           inherit (inputs) disko;
           repoRoot = ./.;
+        };
+        boot-storage-in-place-multidisk = import ./tests/nixtest/in_place_encryption_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          inherit (inputs) disko;
+          repoRoot = ./.;
+          multidisk = true;
         };
         root-guard = import ./tests/nixtest/root_guard_vm_test.nix {
           pkgs = inputs.nixpkgs.legacyPackages.${system};

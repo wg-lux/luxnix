@@ -56,6 +56,7 @@
   - [Fleet Secure Boot](docs/secure-boot.md)
   - [Setup and Bootstrap](docs/vault-setup.md)
   - [OpenBao Hub and Vault Migration](docs/openbao.md)
+  - [Hub Secret Delivery](docs/hub-secret-delivery.md)
   - [Root Integrity Prototype](docs/root-integrity-prototype.md)
   - [Maintainer Notes](docs/vault-maintainer-operations.md)
   - [Admin Password Creation and Rotation](docs/admin-passwords.md)

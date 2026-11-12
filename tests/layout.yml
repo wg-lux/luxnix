@@ -28,6 +28,14 @@ nix_suites:
     path: tests/nixtest/fresh_install_vm_test.nix
     scope: Packaged fresh installation through LUKS2 boot and administrator login.
     command: nix build .#checks.x86_64-linux.boot-storage-fresh --no-link -L
+  - id: fresh-install-multidisk
+    path: tests/nixtest/fresh_install_vm_test.nix
+    scope: Two-disk packaged installation, retained secondary keys, resume and cold boot.
+    command: nix build .#checks.x86_64-linux.boot-storage-fresh-multidisk --no-link -L
+  - id: in-place-multidisk
+    path: tests/nixtest/in_place_encryption_vm_test.nix
+    scope: Independent root and data conversion, source preservation, secondary unlock and cold boot.
+    command: nix build .#checks.x86_64-linux.boot-storage-in-place-multidisk --no-link -L
   - id: root-guard
     path: tests/nixtest/root_guard_vm_test.nix
     scope: Real preflight and recovery classification against plaintext, LUKS2 and interrupted disposable disks.

@@ -249,12 +249,8 @@ def test_fleet_boot_contract():
     assert hosts["gc-10"]["swap"] == []
     for path in ["/var/lib/lx-annotate", "/var/lib/postgresql", "/var/backup/postgresql"]:
         assert hosts["gc-10"]["devices"][path] == "/dev/mapper/luxnix-app-storage"
-    assert hosts["gc-10"]["arrays"] == {"application": {
-        "level": 1, "type": "luks", "name": "luxnix-app-storage",
-        "device": "/dev/md/application", "filesystem": "btrfs",
-    }}
-    assert hosts["gc-10"]["swraid"]
-    assert "/dev/md/application" in hosts["gc-10"]["crypttab"]
+    assert hosts["gc-10"]["arrays"] == {}
+    assert "/dev/disk/by-partlabel/btrfs_data01_p1" in hosts["gc-10"]["crypttab"]
     assert "archive_hdd" in hosts["gs-02"]["crypttab"]
     options = hosts["gs-02"]["mountOptions"]
     def dependencies(mount):
@@ -296,6 +292,7 @@ def test_splash_and_wallet_unlock_follow_storage_layout(host, splash, autologin)
       c = f.nixosConfigurations.HOST.config;
     in {
       splash = c.boot.plymouth.enable;
+      theme = c.boot.plymouth.theme;
       autologin = c.services.displayManager.autoLogin.enable;
       user = c.services.displayManager.autoLogin.user;
       client = c.user.client.name;
@@ -308,6 +305,9 @@ def test_splash_and_wallet_unlock_follow_storage_layout(host, splash, autologin)
     assert result.returncode == 0, result.stderr
     config = json.loads(result.stdout)
     assert config["splash"] is splash
+    if splash:
+        # The disk password is entered on the graphical splash.
+        assert config["theme"] == "bgrt"
     assert config["autologin"] is autologin
     loadkey = "pam_systemd_loadkey.so" in config["pam"]
     assert loadkey is autologin
@@ -341,6 +341,12 @@ def test_every_exported_host_uses_password_login():
       in builtins.mapAttrs (_: h: let c = h.config; in {
         auto = c.services.displayManager.autoLogin.enable;
         bootAuto = c.roles.desktop.addons.plasma.bootAutoLogin;
+        storage = c.luxnix.storage.operatorUnlocked.enable;
+        storageHelper = builtins.any (p: (p.name or "") == "luxnix-operator-storage")
+          c.environment.systemPackages;
+        unlockHelper = builtins.any (p: (p.name or "") == "luxnix-setup-remote-unlock")
+          c.environment.systemPackages;
+        bootLuks = c.luxnix.storage.operatorUnlocked.layout == "boot-luks";
         failures = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
       }) f.nixosConfigurations
     '''
@@ -351,6 +357,10 @@ def test_every_exported_host_uses_password_login():
     assert {"gc-02", "gc-09", "gc-10", "gs-02"} <= hosts.keys()
     for name, policy in hosts.items():
         assert not policy["auto"] and not policy["bootAuto"], name
+        if policy["storage"]:
+            assert policy["storageHelper"], name
+            # The identity must be creatable before remote unlock is enabled.
+            assert policy["unlockHelper"] is policy["bootLuks"], name
         login_failures = [message for message in policy["failures"]
                           if any(word in message.lower() for word in
                                  ("password", "autologin", "admin ", "client credentials"))]

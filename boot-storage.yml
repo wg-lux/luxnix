@@ -13,7 +13,7 @@ workflows:
   fresh:
     command: devenv shell luxnix --profile <administrator-profile.yml>
     implementation: lx_administration/storage/fresh_install.py
-    scope: One GPT disk with EFI and LUKS2 Btrfs root; manual console unlock.
+    scope: GPT system disk with EFI and LUKS2 Btrfs root, plus independent LUKS2 Btrfs data disks; manual root console unlock.
     profile: Explicit fresh/new-disks or disposable/discard-approved selection for this operation.
     prerequisites:
       - Clean durable release with locked inputs and administrator-prepared hardware profile.
@@ -38,12 +38,55 @@ workflows:
     command: devenv shell luxnix inspect <host>
     behavior: Read-only verification of configured live mounts, secondary keys and administrator hash.
     configuration: Apply matching configuration through the existing deployment workflow after inspection.
+    routing: migrate stops on a host whose live root is already LUKS2 and has no migration plan, and names this command; there is nothing to convert.
   preservation:
     command: devenv shell luxnix migrate
     implementation: lx_administration/storage/boot_setup.py
     behavior: Preserve existing data with the established in-place conversion and recovery journal.
     prerequisites: Existing recovery, backup, identity preservation and acceptance requirements remain applicable.
+    multidisk: Encrypt independent Btrfs partitions in place; preserve filesystem identities and source containers, with data keys on encrypted root.
+    excludes: MD arrays and multi-member Btrfs conversion.
+remote_unlock:
+  scope: Opt-in per host; no deployed host has it enabled or physically accepted yet.
+  locked_root: ssh -tt -p 2222 root@<early-boot address> reaches the dedicated initrd SSH endpoint, which only accepts the root passphrase.
+  after_boot: sudo luxnix-operator-storage start opens secondary storage and starts guarded services in a normal SSH session. It needs a booted system and cannot unlock root.
+  without_remote_unlock: A reboot or power loss leaves the host unreachable until someone types the passphrase at its console.
+  enable_on_encrypted_host:
+    - Deploy a generation containing luxnix-setup-remote-unlock, then run sudo luxnix-setup-remote-unlock; it creates the initrd host identity once on verified encrypted root and prints the known_hosts line.
+    - Set storage.operatorUnlocked.remoteUnlock in the host inventory, regenerate, and install with boot; a missing identity stops the switch.
+    - With an operator at the console as fallback, reboot and unlock once over the real management network before relying on it.
+  requirements:
+    - Reachable wired management interface, static address and verified NIC drivers on every host.
+    - Explicit allowed source addresses and dedicated operator keys, with pinned initrd host identity.
+    - The normal OpenVPN overlay cannot provide connectivity before root unlock; off-site operators jump through an allowed host on the same LAN that is itself running.
+    - Not available together with controller-signed Secure Boot.
+  fleet_status: Host-specific management inputs and physical acceptance remain required; do not infer readiness from helper availability.
+  physical_acceptance:
+    initial_targets: [gc-02, gc-09]
+    evidence: Private controller observations under cmdb/boot-access-checks; never commit host facts or passwords.
+    stages:
+      baseline:
+        - Verify mounted root is cryptroot and running, booted, persistent and default boot generations match; inspect any one-shot override.
+        - List the installed initrd to establish whether SSH is actually included; helper presence and a running normal SSH server are not sufficient.
+        - Test normal SSH from the intended operator and jump hosts before relying on it for access after boot.
+      private_operator_checks:
+        - Run sudo luxnix-verify-boot-storage on the installed host.
+        - Resolve the mounted cryptroot backing device and run cryptsetup open --type luks2 --test-passphrase against that exact device in a private root terminal; do not enroll or remove keyslots.
+      candidate_admission:
+        - Require an operator present at the console, verified disk passphrase, working keyboard/display and a preserved compatible boot entry.
+        - Confirm a reachable management LAN, reserved static address, exact NIC and drivers, allowed source addresses and independently running jump host.
+        - Provision and pin the dedicated initrd host identity; use explicit dedicated operator public keys and a signing-compatible reviewed release.
+        - Build and inspect the exact candidate initrd, normal SSH access and storage contract before requesting approval for boot staging or reboot.
+      attended_boot:
+        - Test one host at a time, keeping the operator or jump host running; record the candidate closure and boot entry before proceeding.
+        - Unlock through strictly pinned initrd SSH while the console operator watches; use console recovery if that path fails.
+        - After boot, reconnect through normal SSH and verify root, secondary storage, generation identity, administrator access and guarded services.
+        - Record observed results and failures; physical acceptance remains pending until every required check passes on that host.
 verification:
   python: uv run pytest -q tests/test_fresh_install.py tests/test_luxnix_cli.py
   vm: nix build .#checks.x86_64-linux.boot-storage-fresh --no-link -L
+  multidisk_vm: >-
+    nix build .#checks.x86_64-linux.boot-storage-fresh-multidisk
+    .#checks.x86_64-linux.boot-storage-in-place-multidisk --no-link -L
+  remote_vm: nix build .#checks.x86_64-linux.boot-storage-remote --no-link -L
   qualification: Repository tests do not establish physical host acceptance.

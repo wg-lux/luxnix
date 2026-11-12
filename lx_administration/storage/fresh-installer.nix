@@ -5,10 +5,15 @@
   plan,
   diskoScript,
   closure,
-  disk,
+  disk ? null,
+  disks ? {
+    system = disk;
+  },
 }:
 let
-  partitions = builtins.attrValues disk.content.partitions;
+  partitions = pkgs.lib.concatMap (d: builtins.attrValues d.content.partitions) (
+    builtins.attrValues disks
+  );
   isESP =
     p:
     p.type == "EF00"
@@ -48,8 +53,29 @@ let
   );
 in
 assert
-  disk.content.type == "gpt"
-  && builtins.length partitions == 2
+  pkgs.lib.all (d: d.content.type == "gpt") (builtins.attrValues disks)
+  && pkgs.lib.all (
+    p:
+    isESP p
+    || isRoot p
+    || (
+      p.content.type == "luks"
+      && !p.content.initrdUnlock
+      &&
+        p.content.extraFormatArgs == [
+          "--type"
+          "luks2"
+        ]
+      && builtins.elem p.content.content.type [
+        "btrfs"
+        "swap"
+      ]
+      && p.content.askPassword
+      && p.content.passwordFile == null
+      && p.content.keyFile == null
+      && !(p.content.settings ? keyFile)
+    )
+  ) partitions
   && builtins.length (builtins.filter isESP partitions) == 1
   && builtins.length (builtins.filter isRoot partitions) == 1;
 pkgs.writeShellApplication {

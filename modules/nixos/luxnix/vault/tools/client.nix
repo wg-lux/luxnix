@@ -10,6 +10,7 @@ with lib;
 with lib.luxnix;
 let
   inherit (ctx)
+    vaultCli
     cfg
     runtimeDir
     runtimeEnvironmentFile
@@ -19,7 +20,187 @@ let
     verifyClientStorage
     clientHubPkiCfg
     vaultAuthErrorClassifierTool
+    hubSecretStateDir
     ;
+  sensitiveGroup = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  hubSecretHelper = ../../../../../scripts/vault/fetch_hub_secret.py;
+  # Arguments shared by every hub KV fetch on this host.
+  hubSecretHelperCommand = lib.escapeShellArgs (
+    [
+      "${pkgs.python3}/bin/python3"
+      "-I"
+      (toString hubSecretHelper)
+      "--state-dir"
+      hubSecretStateDir
+      "--cli"
+      "${vaultCli}/bin/vault"
+      "--classifier"
+      "${vaultAuthErrorClassifierTool}/bin/luxnix-vault-classify-auth-error"
+    ]
+    # allowOffline is the single outage switch: a hub outage keeps the last
+    # accepted value; a wrong or stale answer is never papered over.
+    ++ lib.optional cfg.client.allowOffline "--tolerate-outage"
+  );
+  hubSecretHelperArgs =
+    {
+      name,
+      kvPath,
+      field,
+      stripNewlines ? false,
+      emptyWhenUnavailable ? false,
+    }:
+    hubSecretHelperCommand
+    + " "
+    + lib.escapeShellArgs (
+      [
+        "--name"
+        name
+        "--kv-path"
+        "${clientHubPkiCfg.kvMountPath}/${kvPath}"
+        "--field"
+        field
+      ]
+      ++ lib.optional stripNewlines "--strip-newlines"
+      ++ lib.optional emptyWhenUnavailable "--empty-when-unavailable"
+    );
+  # managed-secrets generator body: fills $TARGET_FILE, $SECRET_FILE is the deployed copy.
+  hubSecretFetch =
+    args: ''${hubSecretHelperArgs args} --target "$TARGET_FILE" --previous "$SECRET_FILE"'';
+
+  hubSecretsDeliverScript = pkgs.writeShellScript "luxnix-hub-secrets-deliver" ''
+    set -euo pipefail
+    umask 077
+    ulimit -c 0
+
+    ${verifyClientStorage}
+    unset VAULT_SKIP_VERIFY VAULT_TLS_SERVER_NAME VAULT_AGENT_ADDR VAULT_TOKEN
+    ${optionalString (cfg.client.address != null) ''
+      export VAULT_ADDR=${lib.escapeShellArg cfg.client.address}
+    ''}
+    ${optionalString (cfg.client.caCertFile != null) ''
+      export VAULT_CACERT=${lib.escapeShellArg (toString cfg.client.caCertFile)}
+    ''}
+
+    # Every run authenticates afresh: the boot-time token expires long before the next refresh.
+    ${optionalString (cfg.client.auth.method == "approle") ''
+      ROLE_ID_FILE=${lib.escapeShellArg (toString cfg.client.auth.roleIdFile)}
+      SECRET_ID_FILE=${lib.escapeShellArg (toString cfg.client.auth.secretIdFile)}
+      ${optionalString cfg.client.auth.deferUntilProvisioned ''
+        if [ ! -s "$ROLE_ID_FILE" ] || [ ! -s "$SECRET_ID_FILE" ]; then
+          echo "Hub enrollment is pending; no hub secrets are fetched yet."
+          exit 0
+        fi
+      ''}
+      VAULT_AUTH_ERROR_CLASSIFIER=${vaultAuthErrorClassifierTool}/bin/luxnix-vault-classify-auth-error
+      source ${../../../../../scripts/vault/refresh-client-auth.sh}
+      if ! refresh_client_auth; then
+        case "''${VAULT_AUTH_STATE:-}" in
+          vault-unreachable|vault-sealed) ;;
+          *) echo "ERROR: the hub rejected this host; deployed secrets are left untouched." >&2; exit 1 ;;
+        esac
+      fi
+    ''}
+    ${optionalString (cfg.client.auth.method == "tokenFile") ''
+      TOKEN_FILE=${lib.escapeShellArg (toString cfg.client.auth.tokenFile)}
+      ${optionalString cfg.client.auth.deferUntilProvisioned ''
+        if [ ! -s "$TOKEN_FILE" ]; then
+          echo "Hub enrollment is pending; no hub secrets are fetched yet."
+          exit 0
+        fi
+      ''}
+      if [ ! -s "$TOKEN_FILE" ]; then
+        echo "ERROR: the hub token file is missing or empty." >&2
+        exit 1
+      fi
+      VAULT_TOKEN="$(tr -d '\n' < "$TOKEN_FILE")"
+      export VAULT_TOKEN
+      # Periodic site tokens live only while they are renewed.
+      vault token renew >/dev/null 2>&1 \
+        || echo "WARNING: the hub token was not renewed (hub unavailable or token not renewable)." >&2
+    ''}
+
+    failed=0
+    deliver() {
+      local name="$1" kv_path="$2" field="$3" path="$4" owner="$5" group="$6" mode="$7"
+      local strip="$8" required="$9"
+      shift 9
+      local directory temporary
+      local -a flags=()
+      [ "$strip" = 1 ] && flags+=(--strip-newlines)
+      [ "$required" = 1 ] || flags+=(--empty-when-unavailable)
+      directory="$(dirname "$path")"
+      [ -d "$directory" ] || install -d -m 0750 -o root -g ${lib.escapeShellArg sensitiveGroup} "$directory"
+      ${verifySecretStorage} "$path"
+      temporary="$(mktemp "$directory/.$name.tmp.XXXXXX")"
+      if ! ${hubSecretHelperCommand} --name "$name" --kv-path "$kv_path" --field "$field" \
+        --target "$temporary" --previous "$path" "''${flags[@]}"; then
+        rm -f -- "$temporary"
+        failed=1
+        return 0
+      fi
+      if [ ! -s "$temporary" ]; then
+        rm -f -- "$temporary"
+        return 0
+      fi
+      chown "$owner:$group" "$temporary"
+      chmod "$mode" "$temporary"
+      if [ -f "$path" ] && cmp -s "$temporary" "$path"; then
+        rm -f -- "$temporary"
+        chown "$owner:$group" "$path"
+        chmod "$mode" "$path"
+        return 0
+      fi
+      mv -f -- "$temporary" "$path"
+      echo "Deployed hub secret $name."
+      for unit in "$@"; do
+        systemctl try-restart --no-block "$unit"
+      done
+    }
+
+    ${lib.concatStringsSep "\n" (
+      lib.mapAttrsToList (
+        name: secret:
+        "deliver "
+        + lib.escapeShellArgs (
+          [
+            name
+            "${clientHubPkiCfg.kvMountPath}/${secret.kvPath}"
+            secret.field
+            secret.path
+            secret.owner
+            secret.group
+            secret.mode
+            (if secret.stripNewlines then "1" else "0")
+            (if secret.required then "1" else "0")
+          ]
+          ++ secret.restartUnits
+        )
+      ) cfg.client.secrets
+    )}
+    exit "$failed"
+  '';
+
+  hubSecretsStatusTool = pkgs.writeShellApplication {
+    name = "luxnix-hub-secrets-status";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+    ];
+    text = ''
+      # Metadata only: names, KV paths, accepted versions and timestamps.
+      shopt -s nullglob
+      files=(${lib.escapeShellArg hubSecretStateDir}/*.json)
+      if [ "''${#files[@]}" -eq 0 ]; then
+        echo "No hub secret has been accepted on this host yet."
+        exit 0
+      fi
+      for file in "''${files[@]}"; do
+        jq -r --arg name "$(basename "$file" .json)" \
+          '"\($name): \(.status // "unknown") version=\(.version // "none") path=\(.kv_path // "-") accepted=\((.accepted_at // 0) | todate) checked=\((.checked_at // 0) | todate)\(if .reason then " reason=" + .reason else "" end)"' \
+          "$file"
+      done
+    '';
+  };
   vaultCaInstallTool = pkgs.writeShellApplication {
     name = "luxnix-vault-install-server-ca";
     runtimeInputs = [
@@ -59,6 +240,50 @@ let
       trap - EXIT
       echo "Installed authenticated Vault CA with SHA-256 fingerprint $actual."
       echo "No service was restarted. Verify configuration, then start vault-auth-setup.service explicitly."
+    '';
+  };
+
+  siteTokenInstallTool = pkgs.writeShellApplication {
+    name = "luxnix-vault-install-site-token";
+    runtimeInputs = [
+      vaultCaInstallTool
+      pkgs.coreutils
+    ];
+    text = ''
+      set -euo pipefail
+      umask 077
+      ulimit -c 0
+
+      if [ "$#" -ne 2 ]; then
+        echo "Usage: luxnix-vault-install-site-token <token-directory> <expected-server-ca-sha256-fingerprint>" >&2
+        exit 2
+      fi
+      if [ "$(id -u)" -ne 0 ]; then
+        echo "ERROR: token installation must run as root." >&2
+        exit 1
+      fi
+      source_directory="$1"
+      ${verifyClientStorage}
+      ${verifySecretStorage} "$source_directory"
+      for name in site-token vault-server-ca.pem; do
+        if [ -L "$source_directory/$name" ] || [ ! -f "$source_directory/$name" ] || [ ! -s "$source_directory/$name" ]; then
+          echo "ERROR: token directory needs a non-empty regular file: $name" >&2
+          exit 1
+        fi
+      done
+      # The pinned CA is authenticated first; a token is useless against another server.
+      luxnix-vault-install-server-ca "$source_directory/vault-server-ca.pem" "$2" >/dev/null
+
+      target=${lib.escapeShellArg (toString cfg.client.auth.tokenFile)}
+      target_directory="$(dirname "$target")"
+      install -d -m 0750 -o root -g ${lib.escapeShellArg sensitiveGroup} "$target_directory"
+      temporary="$(mktemp "$target_directory/.site-token.XXXXXX")"
+      trap 'rm -f -- "$temporary"' EXIT
+      install -m 0400 -o root -g root "$source_directory/site-token" "$temporary"
+      mv -f -- "$temporary" "$target"
+      trap - EXIT
+      echo "Installed the authenticated server CA and this host's hub token."
+      echo "No service was started. Start vault-auth-setup.service, then luxnix-hub-secrets.service."
     '';
   };
 
@@ -236,7 +461,7 @@ let
       export PATH=${
         lib.makeBinPath [
           pkgs.jq
-          pkgs.vault
+          vaultCli
         ]
       }:"$PATH"
       ${optionalString (cfg.client.address != null) ''
@@ -287,7 +512,7 @@ let
     }
     trap cleanup EXIT
 
-    if ! ${pkgs.vault}/bin/vault write -format=json \
+    if ! ${vaultCli}/bin/vault write -format=json \
       ${lib.escapeShellArg "${clientHubPkiCfg.mountPath}/issue/${clientHubPkiCfg.roleName}"} \
       common_name=${lib.escapeShellArg clientHubPkiCfg.commonName} \
       ttl=${lib.escapeShellArg clientHubPkiCfg.ttl} > "$response"; then
@@ -328,6 +553,10 @@ let
 in
 {
   inherit
+    siteTokenInstallTool
+    hubSecretFetch
+    hubSecretsDeliverScript
+    hubSecretsStatusTool
     vaultCaInstallTool
     hubSiteEnrollmentInstallTool
     forceHubClientReissueTool

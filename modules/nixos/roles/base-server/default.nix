@@ -14,6 +14,9 @@ in
   };
 
   config = mkIf cfg.enable {
+    # Servers and the central hub serve the VPN; this outranks the follower
+    # tier that endoreg-client sets on hub hosts.
+    luxnix.networkAccess.tier = lib.luxnix.networkAccess.mkTierDefault "leader";
 
     roles = {
       common.enable = true;

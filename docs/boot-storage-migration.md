@@ -38,8 +38,9 @@ the target-host preflight admits only generations that match the physical disk
 (see [boot storage recovery](boot-storage-recovery.md)). The plaintext bridge
 `plaintextRootBridge` exists for disposable test machines only.
 
-Plymouth uses the text `details` theme and waits for the passphrase without a
-limit. Keep console access and a matching generation. After a failure, compare
+Plymouth uses the graphical `bgrt` theme (firmware logo, spinner and password
+field) and waits for the passphrase without a limit. Without a usable
+framebuffer it falls back to its text prompt. Keep console access and a matching generation. After a failure, compare
 `/run/current-system`, `/run/booted-system`, the system profile and the bootloader
 default separately. Rollback selects software only; disk conversion, keys and
 application data stay as they are.
@@ -67,6 +68,50 @@ alternatives. `devenv shell luxnix status` shows progress without changing state
 `devenv shell luxnix storage <action>` and `devenv shell boot-storage-setup` expose
 the administrator interface.
 
+### Selecting a host for migration
+
+A host whose running root is already LUKS2 and that has no migration plan has
+nothing to convert: `luxnix migrate` stops and names `luxnix inspect <host>`.
+
+`luxnix migrate` plans a host only when all of the following hold. Otherwise it
+stops before planning, changes nothing, and lists every missing step at once, in
+the order to do them.
+
+1. **The inventory selects `boot-luks`.** Set
+   `storage.operatorUnlocked.layout: '"boot-luks"'` under `host_luxnix` in
+   `ansible/inventory/host_vars/<host>.yml`, then run
+   `devenv tasks run autoconf:check` and `devenv tasks run autoconf:generate`.
+   From then until conversion finishes, normal rebuilds of that host are refused
+   with `root-not-luks`, so deploy unrelated changes first.
+2. **`boot_storage.hosts.<host>` exists in `autoconf/config.yml`,** with facts read
+   on the host itself, never copied from `disks.nix`:
+
+   ```yaml
+   boot_storage:
+     hosts:
+       <host>:
+         hardware_uuid: <sudo cat /sys/class/dmi/id/product_uuid>
+         root_encryption: luks2
+         installation: in-place
+         source_retention: in-place
+         disks:
+           - path: /dev/disk/by-id/<disk>
+             serial: <serial>
+             size_bytes: <bytes>
+   ```
+
+   On the target, `ls -l /dev/disk/by-id/` names the disks and
+   `lsblk -bdno SERIAL,SIZE /dev/disk/by-id/<disk>` prints each serial and size.
+   List **every** disk the host's `disks.nix` declares, system and data disks
+   alike, but no external backup disk.
+3. **The evaluated layout is convertible:** a Btrfs root plus, optionally,
+   independent Btrfs data partitions. MD arrays, multi-member Btrfs and other
+   filesystems stop planning; declare each data disk as one Btrfs partition, or
+   keep the host on `legacy-containers`.
+4. **The host evaluates without failed assertions.**
+
+Then follow the [two-machine migration](migration-environment.md#two-machines-the-standard-setup).
+
 ### Configuration and recovery media
 
 Migration requires `root_encryption: luks2`, `installation: in-place` and
@@ -75,7 +120,7 @@ and each disk's exact `path`, `serial` and `size_bytes`; `paths.nix_output` name
 the clean release checkout. State lives in `boot_storage.state_root`, normally
 `/recovery/luxnix-state/<host>`.
 
-Media preparation picks an existing removable ext4, XFS or Btrfs filesystem apart
+Media preparation picks an existing removable ext4 or Btrfs filesystem apart
 from the system and target disks, checks its space and mounts it at `/recovery`.
 Use `--device` to choose among several. This drive holds the journal, not a data
 backup; credentials go into separate encrypted custody.
@@ -98,9 +143,11 @@ recovery evidence; keep plan revisions, receipts and journals unedited.
 
 ### In-place root encryption
 
-The converter handles one plaintext Btrfs root; arrays, other filesystems and extra
-encrypted partitions need separate support. In the
-[RAM migration environment](migration-environment.md), `luxnix-migration run
+The converter handles the plaintext Btrfs root and independent Btrfs data
+partitions; MD arrays, multi-member Btrfs and other filesystems are not converted
+(see [selecting a host](#selecting-a-host-for-migration)). In the
+[RAM migration environment](migration-environment.md), started from the controller
+as the [two-machine standard](migration-environment.md#two-machines-the-standard-setup), `luxnix-migration run
 --apply` runs the plan's own source, asks for typed `ENCRYPT IN PLACE` approval and
 the passphrases, checks for mains power, moves the boot default to the migration
 entry, and then:
@@ -133,6 +180,154 @@ same on every keyboard layout, and keep it independently. An interruption resume
 from the LUKS2 header with the same journal. Containers stay until acceptance;
 afterwards `devenv shell luxnix retire-containers` previews their removal, and
 `--apply` deletes them after typed approval, keeping their vault recovery records.
+
+### Prepared review in the RAM environment
+
+Run these after **Root encryption finished** and **Access is prepared**, before
+installation. If the guide is asking for notes, submit an empty description to
+pause first; run commands at the RAM root shell, then return to the guide. Keep
+power connected and stay in RAM until installation confirms the new boot default.
+These checks work at the laptop's physical console; SSH is optional.
+
+Set the host and pinned source from the saved plan, not the RAM image's version:
+
+```sh
+export LX_MIGRATION_HOST="$(python3 -c 'import json; print(json.load(open("/etc/luxnix/migration.json"))["host"])')"
+export LX_MIGRATION_STATE="/recovery/luxnix-state/$LX_MIGRATION_HOST"
+export PYTHONPATH="$(python3 -c 'import json,os; from pathlib import Path; s=Path(os.environ["LX_MIGRATION_STATE"]); print(s.parent/"sources"/json.loads((s/"plan.json").read_text())["source"]["revision"])')"
+```
+
+**Boot artifacts, receipt and target layout.** This read-only check uses the
+planned closure, validates its registration, mounts, administrator credentials,
+secondary keys, disk identity, LUKS state, kernel/initrd space and password receipt.
+Reading the contract inside `/mnt` resolves the target's absolute store symlinks;
+a plain `cat /mnt/nix/store/.../etc/...` can follow them into the RAM store.
+
+```sh
+python3 - <<'PY'
+import json, os, subprocess
+from pathlib import Path
+from lx_administration.storage import boot_migration as m, root_guard as g
+
+state = Path(os.environ['LX_MIGRATION_STATE'])
+with m.locked_state(state):
+    plan = m.load_plan(state)
+    m.verify_source(plan, state)
+    journal = json.loads((state / 'provision.json').read_text())
+    if journal['phase'] != 'complete':
+        raise SystemExit('STOP: conversion is not complete')
+    m.verify_target(plan, m.probe_disks(plan))
+    m.require_closure(plan, Path('/mnt'))
+    system = plan['config']['closure']
+    contract = json.loads(subprocess.check_output([
+        'chroot', '/mnt', system + '/sw/bin/cat',
+        system + '/etc/luxnix/root-storage.json'], text=True))
+    seen = g.observe(contract, root=Path('/mnt'), system=system)
+    findings = g.assess(contract, seen, action='boot', system=system,
+                        first_install=True, require_receipt=True)
+    if findings:
+        raise SystemExit('\n'.join(f'{f.code}: {f.message}' for f in findings))
+    print('Layout:', contract['layout'], 'bootloader:', contract['bootloader']['kind'])
+    print('Initrd:', contract['initrd'], 'receipt:', seen['receipt'])
+    layout = plan['config']['in_place']
+    print('Declared containers:', len(layout['containers']))
+    for volume in layout['containers']:
+        if not Path('/mnt' + volume['container']).is_file():
+            raise SystemExit('STOP: retained container is missing: ' + volume['name'])
+    for target in layout['binds']:
+        marker = Path('/mnt/var/lib/luxnix-in-place') / target.strip('/').replace('/', '__')
+        if not Path('/mnt' + target).is_dir() or not marker.is_file():
+            raise SystemExit('STOP: consolidation evidence is missing: ' + target)
+        print('Consolidated target to inspect:', '/mnt' + target)
+    print('PASS: planned closure, encrypted mounts, access, receipt and consolidation evidence')
+PY
+```
+
+Then compare the mount graph:
+
+```sh
+lsblk -o NAME,TYPE,FSTYPE,SIZE,MOUNTPOINTS
+findmnt -R /mnt
+swapon --show
+```
+
+Require exit status zero and no guard findings. For the manual-passphrase layout,
+the contract must select `boot-luks`, `systemd-boot` (or the reviewed Secure Boot
+loader), `unlocks_root: True`, and `plaintext_bridge: False`. Root and its declared
+Btrfs subvolumes must use `cryptroot`; `/mnt/boot` must be the selected ESP. Swap
+must remain inactive (`swapon --show` prints no devices). The receipt must match
+the current LUKS UUID and header, not merely exist. This review checks planned
+artifacts; the new boot entry and physical cold boot are verified after install.
+
+**Container data.** A complete conversion includes the converter's checksum
+comparison. For each reported target, inspect the expected directories on the
+encrypted root and retain the original container. If the plan declares zero
+containers, record that fact. Where containers were explicitly discarded, cite
+that operator decision; do not claim that their contents were copied or retained.
+
+**Independent recovery credentials.** At the private RAM terminal, retrieve the
+credential from its independent custody and test it without closing `cryptroot`:
+
+```sh
+LX_MIGRATION_ROOT_DEVICE="$(python3 -c 'import json,os; print(json.load(open(os.environ["LX_MIGRATION_STATE"]+"/plan.json"))["config"]["in_place"]["root_device"])')"
+cryptsetup open --type luks2 --test-passphrase "$LX_MIGRATION_ROOT_DEVICE"
+```
+
+Require exit status zero. Repeat for every separately enrolled recovery credential
+and declared secondary volume. A conversion password and its backup can be the
+same credential; do not claim an additional recovery slot unless one was enrolled
+and independently tested. Keep credentials out of arguments, notes and logs. Copy
+the saved `header-after-conversion-*/luks.header` into independent encrypted
+custody; an external plaintext drive alone is not encrypted custody.
+
+**Record the four assessments.** In the guide's dated description, state what you
+actually tested for `boot_artifacts_reviewed`, `target_layout_reviewed`,
+`recovery_slots_tested` and `container_data_consolidated`. Include exit results,
+the reviewed plan/closure, custody location and any authorized container discard;
+no passwords, key contents or patient data. Then confirm only performed checks.
+To return to the guide:
+
+```sh
+luxnix-migration run --apply
+```
+
+Alternatively, write private dated notes and run the explicit review:
+
+```sh
+umask 077
+cat > "$LX_MIGRATION_STATE/prepared-notes.txt"  # type actual results; finish with Ctrl-D
+luxnix-migration review --assessor "$(id -un)" --report "$LX_MIGRATION_STATE/prepared-notes.txt"
+luxnix-migration advance                    # preview the next step
+luxnix-migration advance --apply            # installation still asks for typed approval
+```
+
+If the notes were recorded by root on behalf of another operator, name that
+operator as assessor. Stop on failed checks. In particular, a missing-contract
+error from the pinned installer's verifier must be resolved before installation,
+even if reading the contract via `chroot` succeeds. Do not replace a started plan,
+edit its source copy or mark a failed check verified to get past the error.
+The corrected verifier resolves both the closure's `etc` link and the contract
+file's store link inside the target root; boot-default handover uses the same
+resolver. An older pinned plan needs a reviewed runtime repair with recorded
+original/replacement function hashes, preserving its immutable source and checks.
+
+### Legacy mount overrides
+
+Before installing boot LUKS, retire host-local container mounts that would shadow
+the directories now protected by encrypted root. The install preflight rejects
+matching `.mount` files under `/etc/systemd/system.control`, together with legacy
+`90-luxnix-secret-storage.conf` and `91-luxnix-app-storage.conf` drop-ins. They can
+otherwise keep PostgreSQL and LX-Annotate waiting for deleted container devices
+after an apparently successful encrypted boot.
+
+Review each reported definition's `What`, `Where` and dependencies. Stop its
+affected writers and ensure the old mounts are inactive. Back up only the
+matching files on verified encrypted storage, preserve their relative paths,
+and retire those originals; keep unrelated units. In the installed system,
+`systemctl show <unit> -p FragmentPath -p DropInPaths` identifies loaded overrides.
+Reload systemd after the change and start the affected services; confirm the
+encrypted-storage checks pass. Never remove the whole `system.control` directory
+or disable the storage guards. Legacy-container hosts still need their mounts.
 
 ### Recovery and secret preflight
 
@@ -231,6 +426,33 @@ Fresh-install journals use the path in the [quickstart](boot-storage-quickstart.
 
 ### Remote SSH root unlock
 
+A root-encrypted host that reboots without remote unlock stays unreachable until
+someone types the passphrase at its console. `sudo luxnix-operator-storage start`
+does not change that: it needs a booted system. Only the initrd SSH endpoint
+below unlocks root remotely, and it is opt-in per host.
+
+`sudo luxnix-operator-storage start` works in a normal SSH session on either
+layout: legacy hosts open their existing containers; boot-LUKS hosts verify the
+already unlocked root, open secondary mappings with keys on encrypted root,
+mount their filesystems, verify storage and start the configured guarded
+consumers. It does not encrypt, decrypt or re-open the mounted root.
+
+Before root unlock, the normal system, its SSH server and its OpenVPN client
+have not started. Use the dedicated **initrd SSH endpoint** to enter the root
+passphrase, then reconnect to normal SSH after boot. The inventory's
+`172.16.255.x` OpenVPN addresses are not an early-boot management network.
+Use `ssh -tt admin@<host> 'sudo luxnix-operator-storage start'` after boot;
+use `ssh -tt -p 2222 root@<management-address>` while root is locked. The
+initrd connection uses its dedicated operator key and pinned host key; it cannot
+run sudo or arbitrary shell commands. Entering the passphrase unlocks root and
+allows boot to continue without removing encryption.
+
+Every host needs an independently reachable wired management network, verified
+NIC drivers, dedicated operator keys, an allowed source address/CIDR and a pinned
+initrd host identity. Fleet-wide support does not imply these host-specific inputs
+are configured or physically tested. Do not enable an incomplete configuration.
+
+
 Opt in through the host YAML and regenerate: set
 `luxnix.storage.operatorUnlocked.remoteUnlock` with the interface and NIC modules,
 a static CIDR address, an optional gateway, management `allowedSources` and
@@ -239,9 +461,84 @@ console works as well. `prepare-access` creates the host identity once and print
 its public key. Pin it through the installer channel, then connect with
 `ssh -tt -p 2222` and strict host-key checking. Test the real management network.
 
+#### Physical acceptance before relying on SSH unlock
+
+The staged test sequence is recorded in [boot-storage.yml](https://github.com/wg-lux/luxnix/blob/main/boot-storage.yml).
+Start with gc-02 and gc-09, one at a time, and keep the other operator or jump
+host running. Keep hardware observations in the ignored private directory
+`cmdb/boot-access-checks/`; never put passwords or local host facts into this guide.
+
+First compare the running, booted and persistent system closures with the default
+boot entry and inspect one-shot overrides. Inspect the **installed initrd**, not
+just the inventory: a normal SSH server or an installed operator command does
+not prove that early-boot SSH exists. Confirm normal SSH from the intended
+operator as well; otherwise a successful disk unlock can still leave remote
+administration inaccessible.
+
+In a private terminal on each host, run `sudo luxnix-verify-boot-storage`. Resolve
+the backing device of the **mounted** `cryptroot`, then test its existing disk
+passphrase with `sudo cryptsetup open --type luks2 --test-passphrase <device>`.
+This tests a keyslot without opening another mapping or modifying credentials.
+Do not use a device copied from another host or a historical runbook. Passwords
+stay in the terminal; report only the exit status. A missing or inaccessible
+receipt is an incomplete observation, not proof that a passphrase was verified.
+
+Before changing any boot entry, require a reserved management address, the exact
+wired interface and its drivers, dedicated operator keys and a pinned initrd
+host identity. Prove management LAN reachability separately from the VPN. Normal
+SSH and initrd SSH can have different listeners and access rules. If using USB
+Ethernet, keep its physical port fixed and verify its adapter and USB-controller
+drivers; prefer the built-in wired port when possible.
+
+Only after those checks and a successful build of the exact reviewed candidate
+should boot staging and an attended reboot be approved. Keep an operator at the
+console with the verified disk passphrase, a working keyboard/display and the
+previous compatible entry. Unlock through strictly pinned initrd SSH, then
+reconnect normally and verify the actual booted closure, encrypted mounts,
+administrator access and guarded services. A VM pass or a passphrase test alone
+never establishes physical reboot acceptance.
+
+#### Enabling it on an already encrypted host
+
+`prepare-access` only runs inside a migration. On a host that is already
+encrypted, including one converted earlier with console unlock:
+
+1. Deploy a generation that contains `luxnix-setup-remote-unlock` (every
+   boot-LUKS generation built from this release) and run
+   `sudo luxnix-setup-remote-unlock` on the host. It verifies the encrypted root,
+   creates `/etc/luxnix/initrd-ssh/ssh_host_ed25519_key` once and prints the
+   `known_hosts` line. Rerunning it keeps the identity and prints the line again.
+2. Record the management inputs in the inventory. In shared variables give the
+   host and every allowed client an `ip_local` and the same `network_cluster`
+   under `generic_settings.network.hosts`; in the host YAML set
+   `storage.operatorUnlocked.remoteUnlock` (`enable`, `interface`,
+   `kernelModules`, `address`, optional `gateway`, `authorizedKeys`). Read the
+   interface and driver on the host:
+   `basename "$(readlink /sys/class/net/<interface>/device/driver)"`. Reserve the
+   static address outside the DHCP pool, or reserve the lease for it.
+3. Regenerate, build and install with `boot`. A missing identity stops the
+   switch and names the command from step 1.
+4. With someone at the console as fallback, reboot, pin the printed line and
+   unlock once from each allowed client:
+   `ssh -tt -p 2222 root@<address>`. Only then rely on it.
+
+An operator outside the site reaches the endpoint through an allowed host on the
+same LAN: `ssh -tt -J admin@<jump host> -p 2222 root@<address>`. The endpoint sees
+the jump host's LAN address, so that address must be an allowed source, and the
+jump host must itself be running. Hosts that share one power circuit and all
+wait for a passphrase cannot unlock each other; keep one always-on entry point
+per site, or accept a console visit after a site-wide outage.
+
+A USB network adapter is a weak management interface: its name follows the port
+it is plugged into and it needs the USB host-controller and adapter drivers in
+the initrd. Prefer the built-in wired port.
+
 The dedicated key sits in the **unencrypted initrd**, so it is used for unlock
-only. Controller-held signing rejects host-local initrd secrets; Secure Boot stays
-as configured. Fresh installation uses console unlock by default.
+only. The current controller-signed Secure Boot policy requires an empty
+`boot.initrd.secrets`, which is incompatible with this host-local SSH host-key
+method. Hosts using that policy need a compatible signing and initrd identity
+provisioning design before enabling remote unlock; keep Secure Boot as configured.
+Fresh installation uses console unlock by default.
 
 ### Readiness observations versus admission
 
@@ -309,8 +606,18 @@ point. Keep backups and containers until signed-off acceptance.
 
 `legacy-containers` hosts, including the explicit gc-10 exception, keep their
 container UUIDs, bind maps, original keys and recovery tools, and normal rebuilds
-leave them as they are. gc-10 waits for a recovery console and multi-disk support.
-A one-member RAID1 has no redundancy; adding a mirror is a reviewed MD growth. See
+leave them as they are. gc-10's migration target encrypts both existing Btrfs
+partitions independently, without introducing MD RAID or changing their partition
+layout. The system partition uses `cryptroot`; the data partition uses
+`luxnix-app-storage`. Existing containers remain readable on their original
+filesystems until separate retirement after acceptance. Application and PostgreSQL
+subvolumes live on the encrypted data partition, and secondary unlock keys live
+only on encrypted root. The external Backup export disk is outside the target
+selection and is not converted or formatted.
+
+A recovery console, independent backups, matching disk identities and cold-boot
+acceptance are still required. MD arrays and multi-member Btrfs conversions remain
+unsupported; they require a separately reviewed workflow. See
 [legacy recovery](legacy-storage-recovery.md) for guarded activation and backups.
 Applications start only on encrypted storage, and disk swap stays off.
 

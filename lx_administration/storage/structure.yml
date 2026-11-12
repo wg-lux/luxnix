@@ -12,7 +12,7 @@ boundaries:
 entrypoints:
   - name: fresh-install
     file: fresh_install.py
-    purpose: Build an immutable fresh installer, admit explicit disk erasure, resume verified installation without formatting and inspect existing encrypted storage without migration state.
+    purpose: Build an immutable single or multidisk fresh installer, admit explicit disk erasure, resume verified installation without formatting and inspect existing encrypted storage without migration state.
   - name: fresh-installer-bundle
     file: fresh-installer.nix
     purpose: Package pinned closure, Disko script, public hardware plan and Python runtime without credentials.
@@ -30,7 +30,7 @@ entrypoints:
     purpose: One resumable command for the current host that measures what it can, prepares custody and asks the operator to confirm only what it cannot prove.
   - name: in-place-encryption
     file: in_place.py
-    purpose: Encrypt a plaintext Btrfs root in place with LUKS2, resume interruptions, move container data onto the encrypted root and retire containers after acceptance.
+    purpose: Encrypt independent Btrfs root and data partitions in place with LUKS2, resume interruptions, enroll secondary keys on encrypted root, move container data onto its destination filesystem and retire containers after acceptance.
   - name: secret-preflight
     file: secret_preflight.py
     purpose: Verify from the evaluated host configuration that only the secrets it needs exist, match and decrypt on independent encrypted custody, then write the receipt recovery review requires.
@@ -60,7 +60,7 @@ entrypoints:
     purpose: Explain each required human recovery and acceptance assessment without automatically approving evidence.
   - name: boot-setup
     file: boot_setup.py
-    purpose: In-place-only LUKS2 setup, typed journals and verified non-formatting recovery; no Disko executor. Provides read-only journal inspection and replaces outdated unstarted plans only during explicit migration setup.
+    purpose: In-place-only LUKS2 setup, typed journals and verified non-formatting recovery; no Disko executor. Provides read-only journal inspection and replaces outdated unstarted plans only during explicit migration setup. Stops before planning when this host's live root is already LUKS2 and it has no plan.
   - name: boot-migration
     file: boot_migration.py
     purpose: Bind in-place LUKS2 plans to hardware checks, reviewed evidence and install-only actions; old destructive plans are read-only evidence.

@@ -229,6 +229,16 @@ in
       default = "/etc/secrets/openbao/server-key.pem";
       description = "Runtime TLS private key on encrypted or volatile storage.";
     };
+    tlsFromCredentials = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Hand the TLS files to the service as systemd credentials, copied at start.
+        Disable when a renewing certificate must be reloaded with SIGHUP instead of
+        a restart (a restart seals the server): the listener then reads the files
+        directly and the key must be readable by the openbao user's groups.
+      '';
+    };
   };
 
   config = lib.mkMerge [
@@ -275,8 +285,16 @@ in
             tls_disable = false;
             tls_disable_client_certs = false;
             tls_min_version = "tls12";
-            tls_cert_file = "/run/credentials/openbao.service/server.pem";
-            tls_key_file = "/run/credentials/openbao.service/server-key.pem";
+            tls_cert_file =
+              if cfg.tlsFromCredentials then
+                "/run/credentials/openbao.service/server.pem"
+              else
+                cfg.tlsCertificateFile;
+            tls_key_file =
+              if cfg.tlsFromCredentials then
+                "/run/credentials/openbao.service/server-key.pem"
+              else
+                cfg.tlsKeyFile;
           };
         };
       };
@@ -292,7 +310,7 @@ in
         unitConfig.AssertPathIsMountPoint = "/var/lib/openbao";
         serviceConfig = hardening // {
           DynamicUser = lib.mkForce false;
-          LoadCredential = [
+          LoadCredential = lib.optionals cfg.tlsFromCredentials [
             "server.pem:${cfg.tlsCertificateFile}"
             "server-key.pem:${cfg.tlsKeyFile}"
           ];

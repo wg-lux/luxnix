@@ -41,7 +41,7 @@ def test_unknown_commands_show_the_usage(monkeypatch, capsys):
 def test_a_stop_names_what_is_kept_and_the_next_command():
     text = migration.explain_stop(migration.MigrationError("Disk busy", fix="unmount"))
     assert "STOPPED: Disk busy" in text
-    assert "Kept: the plan, journal and recovery copies" in text
+    assert "Kept: nothing was deleted" in text
     assert text.rstrip().endswith("Next: unmount")
     plain = migration.explain_stop(ValueError("Unexpected"))
     assert f"Next: {migration.STATUS_COMMAND}" in plain

@@ -30,7 +30,7 @@ def _eval_gs_02(module: str, expression: str) -> Any:
         let
           flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           cfg = (flake.nixosConfigurations.gs-02.extendModules {{
-            modules = [ ({{ ... }}: {{ {module} }}) ];
+            modules = [ ({{ lib, ... }}: {{ {module} }}) ];
           }}).config;
         in {expression}
         """
@@ -105,9 +105,30 @@ def test_remote_access_is_inactive_by_default() -> None:
     assert contract == {"hasEnv": False, "deniesAll": False}
 
 
-def test_vpn_restriction_requires_explicit_cidrs() -> None:
-    failed = _eval_gs_02(
+def test_vpn_restriction_defaults_to_role_derived_sources() -> None:
+    # gs-02 is a leader, so the restriction serves the whole VPN subnet.
+    contract = _eval_gs_02(
         "services.luxnix.lxAnnotateLocal.remoteAccess.restrictToVpn.enable = true;",
+        """
+        {
+          cidrs = cfg.services.luxnix.lxAnnotateLocal.remoteAccess.restrictToVpn.allowedClientCidrs;
+          failed = map (a: a.message) (builtins.filter (a: !a.assertion) cfg.assertions);
+        }
+        """,
+    )
+
+    assert contract["cidrs"] == ["172.16.255.0/24"]
+    assert not any("allowedClientCidrs" in message for message in contract["failed"])
+
+
+def test_vpn_restriction_still_requires_a_nonempty_list() -> None:
+    failed = _eval_gs_02(
+        """
+        services.luxnix.lxAnnotateLocal.remoteAccess.restrictToVpn = {
+          enable = true;
+          allowedClientCidrs = lib.mkForce [ ];
+        };
+        """,
         "map (a: a.message) (builtins.filter (a: !a.assertion) cfg.assertions)",
     )
 

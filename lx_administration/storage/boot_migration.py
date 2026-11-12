@@ -94,7 +94,8 @@ def explain_stop(error: BaseException) -> str:
     )
     return (
         f"\nSTOPPED: {error}\n"
-        "Kept: the plan, journal and recovery copies. Do not delete them.\n"
+        "Kept: nothing was deleted. Any existing plan, journal and recovery copies "
+        "stay; do not delete them.\n"
         f"Next: {fix}\n"
     )
 
@@ -204,7 +205,7 @@ def private_path(path: Path, *, directory: bool = False) -> None:
             if stat.S_IMODE(os.fstat(fd).st_mode) & 0o077:
                 raise MigrationError(
                     f"{path} cannot be made private: its filesystem does not store "
-                    "permissions (for example FAT or exFAT). Use ext4, XFS or Btrfs "
+                    "permissions (for example FAT or exFAT). Use ext4 or Btrfs "
                     "recovery media"
                 )
         finally:
@@ -391,8 +392,14 @@ def evaluate(checkout: Path, host: str) -> dict:
       enabled = c.luxnix.storage.operatorUnlocked.enable;
       closure = builtins.toString c.system.build.toplevel;
       disks = builtins.mapAttrs (_: d: d.device) c.disko.devices.disk;
+      # Only Disko-owned filesystems belong to the installation target. External
+      # noauto backup mounts stay configured but are never installed or encrypted.
       mounts = builtins.mapAttrs
-        (_: v: { inherit (v) device fsType options; }) c.fileSystems;
+        (_: v: { inherit (v) device fsType options; })
+        (builtins.listToAttrs (map (name: { inherit name; value = c.fileSystems.${name}; })
+          (builtins.filter (name: let v = c.fileSystems.${name}; in
+            !(builtins.elem "noauto" v.options && builtins.elem "nofail" v.options))
+            (builtins.attrNames c.fileSystems))));
       crypttab = c.environment.etc.crypttab.text or "";
       deferred_protected =
         !c.luxnix.storage.operatorUnlocked.autoStartProtectedServices;
@@ -474,6 +481,11 @@ def evaluate(checkout: Path, host: str) -> dict:
         swap_partitions = map (p: p.device) (builtins.filter isSwap luks);
         other_encrypted = map (p: p.content.name) (builtins.filter
           (p: !isSwap p && !p.content.initrdUnlock) luks);
+        secondary = map (p: {
+          inherit (p.content) name;
+          device = p.device;
+          fs_type = if p.content.content == null then null else p.content.content.type;
+        }) (builtins.filter (p: !isSwap p && !p.content.initrdUnlock) luks);
         containers = map (name: {
           inherit name;
           inherit (o.volumes.${name}) container mountPoint fsType;
@@ -502,7 +514,10 @@ def evaluate(checkout: Path, host: str) -> dict:
     ):
         raise MigrationError(
             "The reviewed host must evaluate without assertions and select "
-            "boot-luks; legacy maintenance is a separate workflow"
+            "boot-luks; legacy maintenance is a separate workflow",
+            fix="select boot-luks in the host inventory, regenerate with Autoconf, "
+            "and resolve every assertion of the host's evaluation "
+            "(docs/boot-storage-migration.md#selecting-a-host-for-migration)",
         )
     if not CLOSURE.fullmatch(result["closure"]):
         raise MigrationError("Unexpected system closure path")
@@ -539,11 +554,20 @@ def validate_in_place(config: dict) -> None:
     layout = config["in_place"]
     if layout["root_fs_type"] != "btrfs":
         raise MigrationError("In-place encryption supports a Btrfs root only")
-    if layout["arrays"] or layout["other_encrypted"]:
+    secondary = layout.get("secondary", [])
+    if (
+        layout["arrays"]
+        or set(layout["other_encrypted"]) != {v["name"] for v in secondary}
+        or any(v["fs_type"] != "btrfs" for v in secondary)
+    ):
         raise MigrationError(
-            "In-place encryption covers one root partition; this host also has "
-            f"{', '.join(layout['arrays'] + layout['other_encrypted'])}. Review them "
-            "separately before planning"
+            "In-place encryption converts the Btrfs root and independent Btrfs data "
+            "partitions only; this host also declares "
+            f"{', '.join(layout['arrays'] + layout['other_encrypted'])}, which it "
+            "cannot convert (MD arrays, multi-member Btrfs or other filesystems)",
+            fix="declare each data disk as one independent Btrfs partition in the "
+            "host's disks.nix, or keep the host on legacy-containers "
+            "(docs/boot-storage-migration.md#selecting-a-host-for-migration)",
         )
 
 
@@ -745,9 +769,7 @@ def load_progress(state: Path, plan: dict) -> dict:
 
 
 def verify_source(plan: dict, state: Path | None = None) -> None:
-    checkout = (
-        plan_checkout(state, plan) if state else Path(plan["spec"]["checkout"])
-    )
+    checkout = plan_checkout(state, plan) if state else Path(plan["spec"]["checkout"])
     if source_identity(checkout) != plan["source"]:
         raise MigrationError(
             "The checkout or flake.lock changed after this plan started",
@@ -1620,10 +1642,7 @@ def hand_over_boot(plan: dict, root: Path) -> str:
     """After install, the firmware default must boot the planned encrypted system."""
     from lx_administration.storage import migration_boot, root_guard
 
-    contract = (
-        root_guard.closure_path(plan["config"]["closure"], root)
-        / "etc/luxnix/root-storage.json"
-    )
+    contract = root_guard.contract_path(plan["config"]["closure"], root)
     esp = root_guard.under(root, json.loads(contract.read_text())["bootloader"]["esp"])
     try:
         return migration_boot.hand_over_boot(root, esp, plan["config"]["closure"])
@@ -1649,7 +1668,9 @@ def lifecycle_position(state: Path, plan: dict, progress: dict) -> dict:
 def verify_booted(plan: dict) -> None:
     """Acceptance is a real boot of the planned closure on the encrypted disk."""
     closure = plan["config"]["closure"]
-    if {os.path.realpath(p) for p in ("/run/booted-system", "/run/current-system")} != {closure}:
+    if {os.path.realpath(p) for p in ("/run/booted-system", "/run/current-system")} != {
+        closure
+    }:
         raise MigrationError(
             "Acceptance must run on the migrated host after it booted the planned system"
         )
@@ -1660,10 +1681,15 @@ def verify_root_guard(plan: dict, root: Path, *, action: str = "boot") -> dict:
     """Probe the actual disk against the planned closure; a saved stage proves nothing."""
     from lx_administration.storage import root_guard
 
-    contract = (
-        root_guard.closure_path(plan["config"]["closure"], root)
-        / "etc/luxnix/root-storage.json"
-    )
+    stale = root_guard.legacy_storage_overrides(root)
+    if stale:
+        raise MigrationError(
+            "Legacy container mount overrides would block services on encrypted root: "
+            + ", ".join(str(path) for path in stale)
+            + ". Back up and retire only these obsolete definitions before installation; "
+            "see docs/boot-storage-migration.md#legacy-mount-overrides"
+        )
+    contract = root_guard.contract_path(plan["config"]["closure"], root)
     if not contract.is_file():
         raise MigrationError(
             "The planned closure has no root-storage contract; create a new plan "
@@ -1698,7 +1724,9 @@ def data_recovery(state: Path, plan: dict, progress: dict) -> dict:
     path = state / RECOVERY_CHECKS
     try:
         check_attestation(
-            "recovery", plan, progress,
+            "recovery",
+            plan,
+            progress,
             fresh=progress["install"]["status"] != "complete",
         )
         artifacts = progress["attestations"]["recovery"]["artifacts"]

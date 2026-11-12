@@ -10,6 +10,7 @@ with lib;
 with lib.luxnix;
 let
   inherit (ctx)
+    vaultCli
     cfg
     runtimeDir
     vaultAuthEnabled
@@ -38,10 +39,43 @@ let
     hubSiteEnrollmentInstallTool
     forceHubClientReissueTool
     issueHubClientCertificateScript
+    openbaoBackend
+    serverUnit
+    serverUnitName
+    hubSecretStateDir
+    hubSecretFetch
+    secretPublishTool
+    siteTokenIssueTool
+    siteTokenInstallTool
+    hubSecretsDeliverScript
+    hubSecretsStatusTool
     ;
+  hubSecrets = cfg.client.secrets;
+  hubSecretsEnabled = hubSecrets != { };
+  hubSecretRestartUnits = lib.unique (
+    lib.concatMap (secret: secret.restartUnits) (lib.attrValues hubSecrets)
+  );
+  vaultServer = serverCfg.enable && !openbaoBackend;
+  openbaoServer = serverCfg.enable && openbaoBackend;
 in
 mkIf cfg.enable {
   assertions = [
+    {
+      assertion = !hubSecretsEnabled || vaultAuthEnabled;
+      message = "luxnix.vault.client.secrets requires tokenFile or AppRole authentication against the hub.";
+    }
+    {
+      assertion =
+        let
+          paths = lib.mapAttrsToList (_: secret: secret.path) hubSecrets;
+        in
+        lib.length paths == lib.length (lib.unique paths);
+      message = "luxnix.vault.client.secrets entries must deploy to distinct file paths.";
+    }
+    {
+      assertion = !openbaoServer || !managedTlsCfg.enable || !config.luxnix.openbao.tlsFromCredentials;
+      message = "The OpenBao hub server with managed TLS must read its leaf from files so renewal reloads without sealing.";
+    }
     {
       assertion = !vaultAuthEnabled || cfg.client.address != null || cfg.client.environmentFile != null;
       message = "luxnix.vault.client.address or luxnix.vault.client.environmentFile must be set when Vault auth bootstrap is enabled.";
@@ -164,7 +198,45 @@ mkIf cfg.enable {
     }
   ];
 
-  services.vault = lib.mkIf serverCfg.enable {
+  # Each default is conditional on its own, so reading client.hubSite never
+  # depends on the merged client value.
+  luxnix.vault.client =
+    let
+      site = cfg.client.hubSite;
+      whenSite = value: lib.mkIf site.enable (lib.mkDefault value);
+      whenAuth = method: value: lib.mkIf (site.enable && site.auth == method) (lib.mkDefault value);
+    in
+    {
+      address = whenSite site.address;
+      caCertFile = whenSite "${site.credentialDirectory}/vault-server-ca.pem";
+      allowOffline = whenSite true;
+      hubPki = {
+        enable = whenSite true;
+        nodeSecretFile = whenSite "${site.credentialDirectory}/source-node-secret";
+        recipientPublicKeyFile = whenSite "${site.credentialDirectory}/hub-recipient-current.pub.pem";
+      };
+      auth = {
+        method = lib.mkMerge [
+          (whenAuth "token" "tokenFile")
+          (whenAuth "approle" "approle")
+        ];
+        tokenFile = whenAuth "token" "${site.credentialDirectory}/site-token";
+        roleIdFile = whenAuth "approle" "${site.credentialDirectory}/approle_role_id";
+        secretIdFile = whenAuth "approle" "${site.credentialDirectory}/approle_secret_id";
+      };
+    };
+
+  # backend = "openbao": same listener, addresses and TLS material, separate state.
+  luxnix.openbao = lib.mkIf openbaoServer {
+    enable = true;
+    inherit (serverCfg) apiAddress bindAddress;
+    tlsCertificateFile = toString serverCfg.tlsCertFile;
+    tlsKeyFile = toString serverCfg.tlsKeyFile;
+    # A renewed leaf is picked up on SIGHUP; a restart would seal the hub.
+    tlsFromCredentials = lib.mkIf managedTlsCfg.enable false;
+  };
+
+  services.vault = lib.mkIf vaultServer {
     enable = true;
     address = serverCfg.bindAddress;
     tlsCertFile = toString serverCfg.tlsCertFile;
@@ -183,7 +255,7 @@ mkIf cfg.enable {
   };
 
   users.users = lib.optionalAttrs serverCfg.enable {
-    vault.extraGroups = [
+    ${serverUnitName}.extraGroups = [
       config.luxnix.generic-settings.sensitiveServiceGroupName
     ]
     ++ lib.optional config.services.nginx.enable "nginx";
@@ -199,15 +271,12 @@ mkIf cfg.enable {
         description = "Vault-backed LX-Annotate NetworkNode request-authentication secret";
         customScript = true;
         refreshOnBoot = true;
-        generator = ''
-          ${pkgs.vault}/bin/vault kv get -field=shared_secret \
-            ${lib.escapeShellArg "${clientHubPkiCfg.kvMountPath}/nodes/${clientHubPkiCfg.commonName}"} \
-            | ${pkgs.coreutils}/bin/tr -d '\n' > "$TARGET_FILE"
-          if [ ! -s "$TARGET_FILE" ]; then
-            echo "ERROR: Vault returned an empty hub source-node secret." >&2
-            exit 1
-          fi
-        '';
+        generator = hubSecretFetch {
+          name = "lx_hub_source_node_secret";
+          kvPath = "nodes/${clientHubPkiCfg.commonName}";
+          field = "shared_secret";
+          stripNewlines = true;
+        };
       };
 
   roles.managed-secrets.customSecrets.lx_hub_recipient_public_key =
@@ -221,9 +290,11 @@ mkIf cfg.enable {
         customScript = true;
         refreshOnBoot = true;
         generator = ''
-          ${pkgs.vault}/bin/vault kv get -field=public_key \
-            ${lib.escapeShellArg "${clientHubPkiCfg.kvMountPath}/${clientHubPkiCfg.recipientPublicKeyKvPath}"} \
-            > "$TARGET_FILE"
+          ${hubSecretFetch {
+            name = "lx_hub_recipient_public_key";
+            kvPath = clientHubPkiCfg.recipientPublicKeyKvPath;
+            field = "public_key";
+          }}
           if [ ! -s "$TARGET_FILE" ] \
             || ! ${pkgs.openssl}/bin/openssl pkey -pubin -in "$TARGET_FILE" -text_pub -noout 2>/dev/null \
               | ${pkgs.gnugrep}/bin/grep -q X25519; then
@@ -239,20 +310,26 @@ mkIf cfg.enable {
       hubSitesReconcileTool
       hubSiteEnrollmentTool
       oidcClientSecretPublishTool
+      secretPublishTool
+      siteTokenIssueTool
       serverRebuildPreparationTool
       hubSiteLifecycleTool
-      pkgs.vault
+      vaultCli
     ]
     ++ lib.optionals (cfg.client.enable && cfg.client.caCertFile != null) [
       vaultCaInstallTool
     ]
     ++ [ pkgs.cryptsetup ]
     ++ lib.optionals clientHubPkiCfg.enable [ forceHubClientReissueTool ]
+    ++ lib.optionals (cfg.client.auth.method == "tokenFile" && cfg.client.caCertFile != null) [
+      siteTokenInstallTool
+    ]
     ++ lib.optionals (clientHubPkiCfg.enable && cfg.client.auth.method == "approle") [
       hubSiteEnrollmentInstallTool
     ]
     ++ lib.optionals vaultAuthEnabled [
       vaultEnrollmentStatusTool
+      hubSecretsStatusTool
     ];
 
   fileSystems = lib.mkIf managedTlsCfg.encryptedStorage {
@@ -272,7 +349,7 @@ mkIf cfg.enable {
 
   systemd = {
     services = {
-      vault = lib.mkIf serverCfg.enable {
+      ${serverUnitName} = lib.mkIf serverCfg.enable {
         bindsTo = lib.optional managedTlsCfg.encryptedStorage tlsStorageMountUnit;
         unitConfig.RequiresMountsFor = lib.optional managedTlsCfg.encryptedStorage managedTlsCfg.stateDirectory;
         unitConfig.AssertPathIsMountPoint = lib.mkIf managedTlsCfg.encryptedStorage managedTlsCfg.stateDirectory;
@@ -298,7 +375,8 @@ mkIf cfg.enable {
         serviceConfig = {
           # "+" runs the address probe with full privileges; Vault stays unprivileged.
           ExecStartPre = lib.optional serverWaitsForBindAddress "+${waitForServerBindAddress}";
-          TimeoutStartSec = "3min";
+          # The VPN bind-address wait needs more than the OpenBao module default.
+          TimeoutStartSec = lib.mkOverride 90 "3min";
           Restart = lib.mkForce "always";
           RestartSec = "5s";
           RestartSteps = 5;
@@ -311,8 +389,8 @@ mkIf cfg.enable {
         bindsTo = lib.optional managedTlsCfg.encryptedStorage tlsStorageMountUnit;
         unitConfig.RequiresMountsFor = lib.optional managedTlsCfg.encryptedStorage managedTlsCfg.stateDirectory;
         unitConfig.AssertPathIsMountPoint = lib.mkIf managedTlsCfg.encryptedStorage managedTlsCfg.stateDirectory;
-        before = [ "vault.service" ] ++ lib.optional config.services.nginx.enable "nginx.service";
-        requiredBy = [ "vault.service" ] ++ lib.optional config.services.nginx.enable "nginx.service";
+        before = [ serverUnit ] ++ lib.optional config.services.nginx.enable "nginx.service";
+        requiredBy = [ serverUnit ] ++ lib.optional config.services.nginx.enable "nginx.service";
         after = [ "systemd-tmpfiles-setup.service" ];
         requires = [ "systemd-tmpfiles-setup.service" ];
         serviceConfig = {
@@ -328,9 +406,9 @@ mkIf cfg.enable {
           ExecStart = managedServerTlsCommand;
           ExecStartPost = pkgs.writeShellScript "reload-vault-after-leaf-rotation" ''
             marker=${lib.escapeShellArg "${runtimeDir}/server-leaf-rotated"}
-            if [ -e "$marker" ] && ${pkgs.systemd}/bin/systemctl is-active --quiet vault.service; then
-              # Vault reloads listener certificate/key file contents on SIGHUP.
-              ${pkgs.systemd}/bin/systemctl kill --kill-whom=main --signal=HUP vault.service
+            if [ -e "$marker" ] && ${pkgs.systemd}/bin/systemctl is-active --quiet ${serverUnit}; then
+              # Vault and OpenBao reload listener certificate/key file contents on SIGHUP.
+              ${pkgs.systemd}/bin/systemctl kill --kill-whom=main --signal=HUP ${serverUnit}
             fi
             if [ -e "$marker" ] && ${pkgs.systemd}/bin/systemctl is-active --quiet nginx.service; then
               ${pkgs.systemd}/bin/systemctl reload nginx.service
@@ -357,7 +435,7 @@ mkIf cfg.enable {
     services.luxnix-vault-issue-hub-client-certificate = lib.mkIf clientHubPkiCfg.enable {
       description = "Issue or renew the LX-Annotate hub-transfer client certificate";
       path = [
-        pkgs.vault
+        vaultCli
         pkgs.jq
         pkgs.getent
       ];
@@ -386,15 +464,26 @@ mkIf cfg.enable {
       };
     };
 
-    timers.luxnix-vault-issue-hub-client-certificate = lib.mkIf clientHubPkiCfg.enable {
-      description = "Renew the LX-Annotate hub-transfer client certificate";
-      wantedBy = lib.optionals (!cfg.client.auth.deferUntilProvisioned) [ "timers.target" ];
-      timerConfig = {
-        OnBootSec = "2m";
-        OnUnitActiveSec = "12h";
-        RandomizedDelaySec = "15m";
-        Persistent = true;
-        Unit = "luxnix-vault-issue-hub-client-certificate.service";
+    timers = {
+      luxnix-vault-issue-hub-client-certificate = lib.mkIf clientHubPkiCfg.enable {
+        description = "Renew the LX-Annotate hub-transfer client certificate";
+        wantedBy = lib.optionals (!cfg.client.auth.deferUntilProvisioned) [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "2m";
+          OnUnitActiveSec = "12h";
+          RandomizedDelaySec = "15m";
+          Persistent = true;
+          Unit = "luxnix-vault-issue-hub-client-certificate.service";
+        };
+      };
+      luxnix-hub-secrets = lib.mkIf hubSecretsEnabled {
+        description = "Refresh declared hub secrets";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnUnitInactiveSec = cfg.client.refreshInterval;
+          RandomizedDelaySec = "2min";
+          Unit = "luxnix-hub-secrets.service";
+        };
       };
     };
 
@@ -403,10 +492,10 @@ mkIf cfg.enable {
       wantedBy = [ "multi-user.target" ];
       before = [ "nginx.service" ];
       after = [
-        "vault.service"
+        serverUnit
         "network-online.target"
       ];
-      requires = [ "vault.service" ];
+      requires = [ serverUnit ];
       wants = [ "network-online.target" ];
       serviceConfig = {
         Type = "oneshot";
@@ -419,7 +508,47 @@ mkIf cfg.enable {
       };
     };
 
+    # Declared hub secrets: first delivery orders before their consumers; the timer
+    # starts the same oneshot again, so no dependent unit is restarted by a refresh
+    # unless its secret actually changed.
+    services.luxnix-hub-secrets = lib.mkIf hubSecretsEnabled {
+      description = "Fetch declared secrets from the hub with this host's scoped token";
+      wantedBy = [ "multi-user.target" ];
+      before = hubSecretRestartUnits;
+      after = [
+        "vault-auth-setup.service"
+        "managed-secrets-setup.service"
+        "network-online.target"
+      ];
+      wants = [
+        "vault-auth-setup.service"
+        "network-online.target"
+      ];
+      path = [
+        vaultCli
+        pkgs.coreutils
+        pkgs.diffutils
+        pkgs.jq
+        pkgs.systemd
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        User = "root";
+        UMask = "0077";
+        LimitCORE = 0;
+        StateDirectory = builtins.baseNameOf hubSecretStateDir;
+        StateDirectoryMode = "0700";
+        TimeoutStartSec = "5min";
+        ExecStart = hubSecretsDeliverScript;
+        Environment = [ "VAULT_CLIENT_TIMEOUT=10s" ];
+        EnvironmentFile = lib.optionals (cfg.client.environmentFile != null) [
+          (toString cfg.client.environmentFile)
+        ];
+      };
+    };
+
     tmpfiles.rules = [
+      "d ${hubSecretStateDir} 0700 root root - -"
       "d ${runtimeDir} 0700 root root - -"
       "z ${runtimeDir} 0700 root root - -"
     ]
@@ -477,7 +606,7 @@ mkIf cfg.enable {
       };
       path = [
         pkgs.coreutils
-        pkgs.vault
+        vaultCli
       ];
     };
   };

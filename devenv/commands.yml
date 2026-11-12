@@ -42,7 +42,7 @@ commands:
       - Successful check-connectivity, pinned host identity and explicit operator approval for the selected host.
       - Systemd-boot and sufficient ESP space; Secure Boot with fleet trust, or explicit local-console image and staging opt-in.
       - Target Python 3.12 or newer, objcopy, sbverify, bootctl, findmnt, lsblk and blkid available on the system PATH.
-      - Independent ext4 or FAT recovery filesystem already mounted; signed filesystem UUID and target-disk exclusion must match.
+      - Independent ext4 or Btrfs recovery filesystem already mounted; signed filesystem UUID and target-disk exclusion must match.
     effects:
       - Copies public signed artifacts and admission helpers to private root-owned target staging.
       - Default mode verifies both artifacts and recovery identity; migration_apply publishes the payload before arming the one-shot entry.
@@ -742,6 +742,19 @@ native_commands:
       - Tests an existing password or adds a confirmed new password after verifying an existing recovery credential and backing up the header.
       - Stores only a private host/UUID/header-bound verification receipt; never stores a password or removes keyslots.
       - Builds, dry activation and the root-storage preflight never enroll credentials.
+
+  - id: setup-remote-unlock
+    summary: Create the dedicated early-boot SSH host identity for remote root unlock, once, on an installed boot-LUKS host.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: sudo luxnix-setup-remote-unlock
+    execution_context: Run on the installed host before installing the first generation that enables remoteUnlock.
+    implementation: modules/nixos/luxnix/operator-unlocked-storage/boot.nix
+    documentation: docs/boot-storage-migration.md
+    effects:
+      - Verifies the mounted root is the configured encrypted device, then creates /etc/luxnix/initrd-ssh/ssh_host_ed25519_key only when it is missing; an existing identity is never replaced.
+      - Prints the public key as a known_hosts line to pin on operator computers and jump hosts; prints no private material.
+      - Does not enable remote unlock, change the initrd, open storage or touch LUKS keyslots.
 
   - id: rebuild-host-switch
     summary: Persist and activate the reviewed configuration using native NixOS switching.

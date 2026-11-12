@@ -366,10 +366,15 @@ def encrypt_in_place(
     from lx_administration.storage import boot_password, in_place
 
     layout = plan["config"]["in_place"]
-    for device in [layout["root_device"], *layout["swap_partitions"]]:
+    for device in [
+        layout["root_device"],
+        *layout["swap_partitions"],
+        *(v["device"] for v in layout.get("secondary", [])),
+    ]:
         if not migration.device_disks(device) <= disks:
             raise migration.MigrationError(
-                "The evaluated root or swap partition is outside the selected disks"
+                "An evaluated root, data or swap partition is outside the selected "
+                "disks"
             )
     migration.verify_unmounted_targets(plan)
     before = snapshot_disks(plan)
@@ -427,7 +432,10 @@ def encrypt_in_place(
         identities = migration.verify_layout(plan, disks)
         save_journal(state, record, phase=Phase.COMPLETE, mounts=identities)
         lifecycle.advance(
-            state, plan["plan_id"], lifecycle.Stage.VERIFYING, detail="encryption finished"
+            state,
+            plan["plan_id"],
+            lifecycle.Stage.VERIFYING,
+            detail="encryption finished",
         )
     except BaseException as error:
         save_journal(state, record, phase=Phase.INTERRUPTED)
@@ -583,11 +591,13 @@ def retire_containers(state: Path, *, apply: bool = False) -> None:
         )
     print(
         "This permanently removes the old containers. Their data now lives only on "
-        "the encrypted root and in your backups."
+        "the encrypted target filesystems and in your backups."
     )
     if input(f"Type exactly: {phrase}\n> ") != phrase:
         raise migration.MigrationError("Cancelled; nothing was deleted")
-    removed = in_place.retire_containers(layout["containers"], layout["binds"])
+    removed = in_place.retire_containers(
+        layout["containers"], layout["binds"], plan["config"]["mounts"]
+    )
     print(f"Deleted: {removed}")
     success("The old containers are removed. Reboot once and confirm services start.")
 
@@ -720,16 +730,111 @@ def save_plan(spec: dict, state: Path) -> None:
     success(PLAN_SAVED)
 
 
+SELECTING_DOC = "docs/boot-storage-migration.md#selecting-a-host-for-migration"
+REMOTE_UNLOCK_DOC = "docs/boot-storage-migration.md#remote-ssh-root-unlock"
+
+
+def inventory_layout(config: AutoconfConfig, host: str) -> tuple[Path, str | None]:
+    """The storage layout the host inventory selects explicitly, if any.
+
+    This only gives an early, specific stop; the evaluated host configuration
+    remains authoritative when the plan is made.
+    """
+    path = config.source_layout.inventory.host_vars_dir / f"{host}.yml"
+    if not path.is_file():
+        return path, None
+    values = (load_unique_yaml_file(path) or {}).get("host_luxnix") or {}
+    layout = values.get("storage.operatorUnlocked.layout")
+    return path, layout.strip('"') if isinstance(layout, str) else None
+
+
+def readiness_problems(config: AutoconfConfig, host: str) -> list[tuple[str, str]]:
+    """Every configuration step still missing before this host can be planned."""
+    problems = []
+    host_vars, layout = inventory_layout(config, host)
+    if layout == "legacy-containers":
+        problems.append(
+            (
+                f"{host} is still set to legacy-containers storage",
+                f"set storage.operatorUnlocked.layout to '\"boot-luks\"' in "
+                f"{host_vars}, then run devenv tasks run autoconf:check and "
+                "devenv tasks run autoconf:generate. Until the conversion finishes, "
+                f"normal rebuilds of {host} are refused (root-not-luks)",
+            )
+        )
+    if host not in config.boot_storage.hosts:
+        problems.append(
+            (
+                f"{host} has no boot storage entry",
+                f"add boot_storage.hosts.{host} to {config.source} with facts read "
+                f"on {host}: hardware_uuid from sudo cat "
+                "/sys/class/dmi/id/product_uuid, and for every disk its "
+                f"systems/x86_64-linux/{host}/disks.nix declares, the by-id path, "
+                "serial and size_bytes (lsblk -bdno SERIAL,SIZE <by-id path>)",
+            )
+        )
+    return problems
+
+
+def live_root_is_luks2() -> bool:
+    """Whether this machine's mounted root already sits on a LUKS2 mapping.
+
+    Reads the kernel mount table and udev only: no privileges, no changes. Any
+    doubt answers False, which leaves the ordinary planning stops in charge.
+    """
+    try:
+        source = subprocess.run(
+            ["findmnt", "-nvo", "SOURCE", "/"],
+            capture_output=True, text=True, check=True, timeout=10,
+        ).stdout.strip()  # fmt: skip
+        tree = subprocess.run(
+            ["lsblk", "-sJo", "NAME,TYPE,FSTYPE,FSVER", source],
+            capture_output=True, text=True, check=True, timeout=10,
+        ).stdout  # fmt: skip
+        (mapping,) = json.loads(tree)["blockdevices"]
+        return mapping["type"] == "crypt" and any(
+            parent["fstype"] == "crypto_LUKS" and parent["fsver"] == "2"
+            for parent in mapping.get("children", [])
+        )
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        return False
+
+
+def refuse_encrypted_root(host: str) -> None:
+    """Stop before planning a conversion for a host with nothing to convert."""
+    if socket.gethostname().split(".", 1)[0] != host or not live_root_is_luks2():
+        return
+    raise migration.MigrationError(
+        f"Root on {host} is already LUKS2-encrypted and it has no migration plan; "
+        "there is nothing to convert and nothing was planned",
+        fix=f"devenv shell luxnix inspect {host} verifies the encrypted mounts, "
+        "secondary keys and administrator hash without changing anything. For "
+        f"unlocking without a console see {REMOTE_UNLOCK_DOC}",
+    )
+
+
 def target_spec(config_path: Path, host: str) -> tuple[dict, Path]:
     if not migration.HOST.fullmatch(host):
         raise migration.MigrationError("Invalid inventory host name")
     config = AutoconfConfig.load(config_path)
     settings = config.boot_storage
     if host not in settings.hosts:
+        refuse_encrypted_root(host)
+    if problems := readiness_problems(config, host):
+        if len(problems) == 1:
+            ((reason, fix),) = problems
+            raise migration.MigrationError(
+                f"{reason}; nothing was planned",
+                fix=f"an administrator: {fix} ({SELECTING_DOC})",
+            )
         raise migration.MigrationError(
-            f"{host} has no boot storage entry",
-            fix=f"an administrator adds boot_storage.hosts.{host} to {config.source} "
-            "(docs/boot-storage-migration.md)",
+            f"{host} is not configured for migration yet; nothing was planned:\n"
+            + "\n".join(
+                f"  {i}. {reason}" for i, (reason, _) in enumerate(problems, 1)
+            ),
+            fix="an administrator, in this order:\n"
+            + "\n".join(f"  {i}. {fix}" for i, (_, fix) in enumerate(problems, 1))
+            + f"\n  See {SELECTING_DOC}",
         )
     spec = settings.hosts[host].model_dump(mode="json") | {
         "schema_version": 1,
@@ -955,8 +1060,12 @@ def review(state: Path, assessor: str, report: Path) -> None:
 
 
 def record_review(
-    state: Path, step: NextStep, assessor: str, report: Path,
-    *, artifacts: tuple[Path, ...] = (),
+    state: Path,
+    step: NextStep,
+    assessor: str,
+    report: Path,
+    *,
+    artifacts: tuple[Path, ...] = (),
 ) -> None:
     """Record checks the operator has already confirmed in this terminal."""
     evidence = state / f"{step.stage}-review-{uuid4().hex}.json"
@@ -987,6 +1096,7 @@ def current_host(config_path: Path) -> str:
     hostname = socket.gethostname().split(".", 1)[0]
     if hostname in hosts:
         return hostname
+    refuse_encrypted_root(hostname)
     # Live installers often have a generic hostname; match recorded hardware.
     try:
         hardware = migration.DMI_UUID.read_text().strip().lower()
@@ -1013,9 +1123,12 @@ def current_host(config_path: Path) -> str:
 
 MIGRATE = "devenv shell luxnix migrate"
 INSTALLER_STEP = (
-    "Boot the staged LuxNix migration entry, mount the recovery drive at /recovery, "
-    "then run at its console: luxnix-migration run --apply  "
-    "(docs/boot-storage-quickstart.md, step 3)"
+    "Conversion runs in the RAM environment. Standard (two machines): from this "
+    "SSH session run devenv shell migration-boot kexec, then add --apply; copy the "
+    "printed known_hosts file to your controller, reconnect on port 2222 and run "
+    "mkdir -p /recovery, mount the recovery drive there, then luxnix-migration run "
+    "--apply. At the machine's own console instead, stage the migration entry. "
+    "(docs/migration-environment.md)"
 )
 
 

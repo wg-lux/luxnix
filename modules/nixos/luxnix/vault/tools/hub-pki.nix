@@ -10,6 +10,7 @@ with lib;
 with lib.luxnix;
 let
   inherit (ctx)
+    vaultCli
     verifySecretStorage
     serverCfg
     hubPkiCfg
@@ -22,7 +23,7 @@ let
       pkgs.gnugrep
       pkgs.jq
       pkgs.openssl
-      pkgs.vault
+      vaultCli
     ];
     text = ''
       set -euo pipefail

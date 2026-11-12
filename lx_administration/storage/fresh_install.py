@@ -33,12 +33,6 @@ def validate_profile(spec: dict) -> None:
 
 
 def validate_config(config: dict) -> None:
-    # First supported installer profile: one GPT disk, ESP and one encrypted root.
-    # More complex layouts retain their existing administration workflows.
-    if len(config["disks"]) != 1 or config["crypttab"].strip():
-        raise Error(
-            "Fresh installation currently supports one disk and one encrypted root"
-        )
     migration.validate_in_place(config)
     if config["secure_boot"] or config["remote_unlock"]["enable"]:
         raise Error(
@@ -77,23 +71,29 @@ def prepare(profile: Path) -> str:
     source = migration.source_identity(checkout)
     config = migration.evaluate(checkout, spec["host"])
     validate_config(config)
-    if len(spec["disks"]) != 1:
-        raise Error("Select exactly one installation disk")
-    disk_name = next(iter(config["disks"]))
-    config["disks"] = {disk_name: spec["disks"][0]["path"]}
+    selected = {d["path"] for d in spec["disks"]}
+    if len(config["disks"]) == len(selected) == 1:
+        disk_name = next(iter(config["disks"]))
+        config["disks"] = {disk_name: spec["disks"][0]["path"]}
+    elif selected != set(config["disks"].values()):
+        raise Error("Select every evaluated installation disk by its exact path")
+    overrides = "\n".join(
+        f"disko.devices.disk.${{{nix_string(name)}}}.device = "
+        f"lib.mkForce {nix_string(path)};"
+        for name, path in config["disks"].items()
+    )
     plan = {"spec": spec, "source": source, "config": config}
     # Nix owns the closure, Disko script and Python runtime in one retained bundle.
     expression = f"""let
       f = builtins.getFlake {nix_string("git+file://" + str(checkout))};
       base = f.nixosConfigurations.{spec["host"]};
       h = base.extendModules {{ modules = [({{ lib, ... }}: {{
-        disko.devices.disk.${{{nix_string(disk_name)}}}.device =
-          lib.mkForce {nix_string(spec["disks"][0]["path"])};
+        {overrides}
       }})]; }};
     in import (f.outPath + "/lx_administration/storage/fresh-installer.nix") {{
       pkgs = h.pkgs; source = f.outPath;
       inherit (h.config.system.build) diskoScript;
-      disk = builtins.head (builtins.attrValues h.config.disko.devices.disk);
+      disks = h.config.disko.devices.disk;
       closure = h.config.system.build.toplevel;
       plan = builtins.fromJSON {nix_string(json.dumps(plan))};
     }}"""
@@ -392,6 +392,16 @@ def install(
                 publish_credentials(values, resume=True)
             else:
                 publish_credentials(values)
+            from lx_administration.storage.in_place import (
+                enroll_secondary_keys,
+                operation_locks,
+            )
+
+            with operation_locks(*lock_fds):
+                enroll_secondary_keys(
+                    plan["config"].get("in_place", {}).get("secondary", []),
+                    Path("/mnt"),
+                )
             migration.verify_target(plan, disks)
             record.update(status="installing", mounts=identities)
             atomic_json(journal, record)
@@ -484,7 +494,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--credentials", type=Path)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument(
-        "--resume", action="store_true",
+        "--resume",
+        action="store_true",
         help="Continue a journaled installation without formatting existing storage",
     )
     args = parser.parse_args(argv)
@@ -526,8 +537,11 @@ def main(argv: list[str] | None = None) -> None:
                     "Prepare with --profile; the bundle needs --state and --credentials"
                 )
             install(
-                load_plan(args.plan), args.state, args.credentials,
-                apply=args.apply, resume=args.resume,
+                load_plan(args.plan),
+                args.state,
+                args.credentials,
+                apply=args.apply,
+                resume=args.resume,
             )
     except (Error, ValueError, OSError, subprocess.SubprocessError) as error:
         print(

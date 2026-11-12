@@ -1,6 +1,12 @@
-{ lib, ... }:
+{
+  config,
+  lib,
+  options,
+  ...
+}:
 let
   inherit (lib) mkOption types;
+  access = (import ../../../../../lib/network-access { inherit lib; }).networkAccess;
 in
 {
   options.services.luxnix.lxAnnotateLocal = {
@@ -55,10 +61,13 @@ in
                   '';
                 };
                 allowedClientCidrs = mkOption {
-                  type = types.listOf (types.strMatching "[0-9]{1,3}(\\.[0-9]{1,3}){3}/[0-9]{1,2}");
-                  default = [ ];
+                  type = types.listOf access.cidr;
+                  # Leaders serve the VPN subnet; followers only operators and leaders.
+                  default =
+                    if options ? luxnix.networkAccess then config.luxnix.networkAccess.serviceSources else [ ];
+                  defaultText = lib.literalExpression "config.luxnix.networkAccess.serviceSources";
                   example = [ "172.16.255.0/24" ];
-                  description = "IPv4 CIDRs of the LuxNix VPN allowed to reach the browser UI and API over TLS.";
+                  description = "VPN networks in CIDR notation allowed to reach the browser UI and API over TLS.";
                 };
               };
             };

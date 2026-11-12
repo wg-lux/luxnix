@@ -442,8 +442,11 @@
           ) (_: database ++ [ config.services.postgresqlBackup.location ])
         )
         // lib.optionalAttrs config.luxnix.vault.server.enable {
-          vault = secrets ++ [ config.luxnix.vault.server.storagePath ];
+          ${lib.removeSuffix ".service" config.luxnix.vault.serverUnit} = secrets ++ [
+            config.luxnix.vault.serverStoragePath
+          ];
         }
+        // lib.optionalAttrs (config.luxnix.vault.client.secrets != { }) { luxnix-hub-secrets = secrets; }
         // lib.optionalAttrs (config.luxnix.vault.enable && config.luxnix.vault.client.hubPki.enable) {
           luxnix-vault-issue-hub-client-certificate = secrets ++ lib.optionals app.enable application;
         }

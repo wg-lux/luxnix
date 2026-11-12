@@ -10,6 +10,8 @@ with lib;
 with lib.luxnix;
 let
   inherit (ctx)
+    serverUnit
+    serverStoragePath
     runtimeDir
     serverCfg
     serverBindHost
@@ -37,7 +39,8 @@ let
     ];
     text = ''
       export EXPECTED_HOSTNAME=${lib.escapeShellArg config.networking.hostName}
-      export VAULT_STORAGE_PATH=${lib.escapeShellArg (toString serverCfg.storagePath)}
+      export VAULT_STORAGE_PATH=${lib.escapeShellArg serverStoragePath}
+      export VAULT_SERVER_UNIT=${lib.escapeShellArg serverUnit}
       export VAULT_TLS_STATE_DIRECTORY=${lib.escapeShellArg managedTlsCfg.stateDirectory}
       export VAULT_TLS_CA_FILE=${lib.escapeShellArg (toString serverCfg.caCertFile)}
       exec ${pkgs.bash}/bin/bash ${../../../../../scripts/vault/prepare-server-rebuild.sh} "$@"

@@ -308,8 +308,10 @@ in
       ];
 
     boot = {
-      # Keep the unlock prompt on a plain text screen without animation.
-      plymouth.theme = lib.mkDefault "details";
+      # Graphical unlock splash: firmware logo, spinner and a password field.
+      # Without a usable framebuffer Plymouth falls back to its text prompt, so
+      # the passphrase can always be entered.
+      plymouth.theme = lib.mkDefault "bgrt";
 
       kernel.sysctl = {
         "net.core.rmem_max" = config.luxnix.generic-settings.linux.rmemMax;

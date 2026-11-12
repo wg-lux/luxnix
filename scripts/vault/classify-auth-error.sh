@@ -16,7 +16,7 @@ if grep -Eqi \
   'x509:|certificate signed by unknown authority|certificate verify failed' \
   "$error_file"; then
   echo "tls-trust-failed"
-elif grep -Eqi 'Vault is sealed' "$error_file"; then
+elif grep -Eqi '(Vault|OpenBao) is sealed' "$error_file"; then
   echo "vault-sealed"
 elif grep -Eqi \
   'connection refused|no such host|network is unreachable|i/o timeout|context deadline exceeded|client\.timeout|temporary failure in name resolution|dial tcp|connection reset|unexpected EOF' \

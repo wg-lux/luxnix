@@ -303,7 +303,8 @@ let
       local install_hash=""
       local installed_package_version=""
       local install_allowed="''${LX_ANNOTATE_WHEEL_INSTALL_ALLOWED:-true}"
-      local wheel_installer_revision="wheel-console-contract-v8-configured-python"
+      local wheel_installer_revision="wheel-console-contract-v9-system-ca-repair"
+      local ca_bundle=${lib.escapeShellArg config.security.pki.caBundle}
       local venv_created="false"
       local python_changed="false"
       local pip_cache_dir=${lib.escapeShellArg "${runtimeRootPath}/pip-cache"}
@@ -388,6 +389,8 @@ let
         install -m 0640 "$wheel_path" "$staged_wheel_path"
         export PIP_CACHE_DIR="$pip_cache_dir"
         export PIP_DISABLE_PIP_VERSION_CHECK=1
+        # pip imports its vendored certifi before applying request-level CA settings.
+        "$python_bin" ${./scripts/wheel-python-repair.py} ${lib.escapeShellArg runtimeWheelVenvPath} --ca-bundle "$ca_bundle"
         # Resolve both install steps before changing the shared environment.
         # shellcheck disable=SC2086
         ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} ${wheelDowngradeGuard}/guard.py \
@@ -402,10 +405,8 @@ let
           # shellcheck disable=SC2086
           ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade --no-deps $pip_install_args $wheel_dependency_overrides --force-reinstall --constraint "$override_constraints"
         fi
+        "$python_bin" ${./scripts/wheel-python-repair.py} ${lib.escapeShellArg runtimeWheelVenvPath} --ca-bundle "$ca_bundle"
       fi
-
-      # pip restores certifi's bundled cacert.pem on every install; relink it
-      # to the regenerated system bundle and refuse to start stale runtimes.
 
       if ! installed_package_version="$(${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} -c 'from importlib.metadata import version; print(version("lx-annotate"))')"; then
         echo "ERROR: Installed wheel does not expose lx-annotate package metadata." >&2
@@ -2078,18 +2079,12 @@ in
                   description = "Vault-managed shared Keycloak client secret";
                   customScript = true;
                   refreshOnBoot = true;
-                  generator =
-                    let
-                      hubPki = config.luxnix.vault.client.hubPki;
-                    in
-                    ''
-                      ${pkgs.vault}/bin/vault kv get -field=client_secret ${lib.escapeShellArg "${hubPki.kvMountPath}/${hubPki.oidcClientSecretKvPath}"} \
-                        | tr -d '\n' > "$TARGET_FILE"
-                      if [ ! -s "$TARGET_FILE" ]; then
-                        echo "ERROR: Vault returned an empty Keycloak client secret." >&2
-                        exit 1
-                      fi
-                    '';
+                  generator = config.luxnix.vault.client.fetchSecretScript {
+                    name = "lx_annotate_keycloak_client_secret";
+                    kvPath = config.luxnix.vault.client.hubPki.oidcClientSecretKvPath;
+                    field = "client_secret";
+                    stripNewlines = true;
+                  };
                 };
 
                 lx_annotate_master_key_local =
@@ -2338,7 +2333,7 @@ in
                 after = [
                   "network-online.target"
                 ]
-                ++ lib.optionals config.luxnix.vault.server.enable [ "vault.service" ]
+                ++ lib.optionals config.luxnix.vault.server.enable [ config.luxnix.vault.serverUnit ]
                 ++ lib.optionals config.luxnix.vault.server.hubPki.enable [
                   "luxnix-vault-publish-hub-client-ca.service"
                 ];
@@ -2370,7 +2365,7 @@ in
                 after = [
                   "network-online.target"
                 ]
-                ++ lib.optionals config.luxnix.vault.server.enable [ "vault.service" ]
+                ++ lib.optionals config.luxnix.vault.server.enable [ config.luxnix.vault.serverUnit ]
                 ++ lib.optionals config.luxnix.vault.server.hubPki.enable [
                   "luxnix-vault-publish-hub-client-ca.service"
                 ];

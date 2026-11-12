@@ -133,10 +133,17 @@ roles.managed-secrets.customSecrets.my-vault-secret = {
   permissions = "0400";
   refreshOnBoot = true;
   generator = ''
-    ${pkgs.vault}/bin/vault kv get -field=my_field secret/data/nodes/${config.networking.hostName}/my-app
+    ${config.luxnix.vault.clientPackage}/bin/vault kv get -field=my_field secret/data/nodes/${config.networking.hostName}/my-app
   '';
 };
 ```
+
+Prefer `luxnix.vault.client.secrets.<name>` for values published on the hub: it
+needs no generator, keeps the last accepted value through a hub outage and
+restarts consumers only when the value changed
+([Hub Secret Delivery](../../../../docs/hub-secret-delivery.md)). A generator
+that must stay in this role can use `config.luxnix.vault.client.fetchSecretScript`
+for the same behaviour.
 
 If the host uses `luxnix.vault.client`, `managed-secrets-setup.service` can consume the runtime Vault environment prepared by `vault-auth-setup.service`, so Vault-backed generators do not depend on root's interactive shell environment.
 

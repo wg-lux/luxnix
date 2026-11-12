@@ -85,6 +85,7 @@ rec {
   # EnvironmentFiles, and shell wrappers render from this attrset.
   llmEnv = {
     LLM_ENABLED = boolString cfg.runtime.llm.enable;
+    REPORT_LLM_DRAFTING_ENABLED = boolString cfg.runtime.llm.enable;
     LLM_PROVIDER = cfg.runtime.llm.provider;
     LLM_MODEL = cfg.runtime.llm.model;
     LLM_BASE_URL = cfg.runtime.llm.baseUrl;

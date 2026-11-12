@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import stat
+import ssl
 import subprocess
 import sys
 import textwrap
@@ -69,6 +70,31 @@ def test_python_repair_rejects_abi_change_without_mutation(tmp_path: Path):
     assert os.readlink(python) == "/missing/interpreter"
 
 
+@pytest.mark.parametrize("valid_bundle", [False, True])
+def test_ca_repair_recovers_collected_store_links_without_rebinding_python(tmp_path, valid_bundle):
+    root = tmp_path / "venv"
+    site = root / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
+    links = [site / "certifi/cacert.pem", site / "pip/_vendor/certifi/cacert.pem"]
+    for link in links:
+        link.parent.mkdir(parents=True)
+        link.symlink_to("/nix/store/collected-ca/cacert.pem")
+    (root / "pyvenv.cfg").write_text("version = 3.12.0\n")
+    metadata = site / "existing-package.dist-info"
+    metadata.write_text("preserve installed-version evidence")
+    bundle = tmp_path / "system.crt"
+    cert = ssl.create_default_context().get_ca_certs(binary_form=True)[0]
+    bundle.write_text(ssl.DER_cert_to_PEM_cert(cert) if valid_bundle else "invalid CA")
+    result = subprocess.run(
+        [sys.executable, str(CONFIG_NIX.parent / "scripts/wheel-python-repair.py"),
+         str(root), "--ca-bundle", str(bundle)], capture_output=True, text=True,
+    )
+    assert (result.returncode == 0) is valid_bundle
+    assert metadata.read_text() == "preserve installed-version evidence"
+    assert not (root / "bin").exists()
+    for link in links:
+        assert os.readlink(link) == (str(bundle) if valid_bundle else "/nix/store/collected-ca/cacert.pem")
+
+
 def _extract_function(function_name: str, *, source_path: Path = SCRIPTS_NIX) -> str:
     source = source_path.read_text(encoding="utf-8")
     match = re.search(
@@ -90,6 +116,11 @@ def _extract_function(function_name: str, *, source_path: Path = SCRIPTS_NIX) ->
         )
 
     body = textwrap.dedent("\n".join(body_lines))
+    # Shell installer tests stub Python/pip; the real CA operation is covered above.
+    body = body.replace(
+        '"$python_bin" ${./scripts/wheel-python-repair.py} ${lib.escapeShellArg runtimeWheelVenvPath} --ca-bundle "$ca_bundle"',
+        'true',
+    )
     body = re.sub(r"\$\{pkgs\.[^}]+\}/bin/([A-Za-z0-9_.+-]+)", r"\1", body)
     body = re.sub(
         r'local wheelhouse_path="\$\{\s*optionalString '
@@ -108,6 +139,7 @@ def _extract_function(function_name: str, *, source_path: Path = SCRIPTS_NIX) ->
         'local wheel_dependency_overrides_hash="${WHEEL_DEPENDENCY_OVERRIDES_HASH:-test-overrides-hash}"',
     )
     config_replacements = [
+        ('${lib.escapeShellArg config.security.pki.caBundle}', '"${SYSTEM_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}"'),
         ("${wheelDowngradeGuard}", "/test-wheel-downgrade-guard"),
         ("${lib.escapeShellArg (builtins.toJSON wheelDependencyOverrides)}", "'[]'"),
         (

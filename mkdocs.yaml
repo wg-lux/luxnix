@@ -112,6 +112,7 @@ nav:
       - Fleet Secure Boot: secure-boot.md
       - Setup and Bootstrap: vault-setup.md
       - OpenBao Hub and Vault Migration: openbao.md
+      - Hub Secret Delivery: hub-secret-delivery.md
       - Root Integrity Prototype: root-integrity-prototype.md
       - Maintainer Notes: vault-maintainer-operations.md
       - Admin Password Creation and Rotation: admin-passwords.md

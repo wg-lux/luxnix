@@ -17,7 +17,7 @@ import pytest
 from lx_administration.storage import boot_migration as migration
 from lx_administration.storage import boot_password
 from lx_administration.storage import boot_setup as setup
-from lx_administration.storage import in_place
+from lx_administration.storage import in_place, boot
 
 
 def test_conversion_child_keeps_operation_lock_after_controller_is_killed(tmp_path):
@@ -111,8 +111,8 @@ def test_supported_layout_is_accepted():
     "changes,message",
     [
         ({"root_fs_type": "ext4"}, "Btrfs root only"),
-        ({"arrays": ["data"]}, "one root partition"),
-        ({"other_encrypted": ["luxnix-data"]}, "one root partition"),
+        ({"arrays": ["data"]}, "cannot convert"),
+        ({"other_encrypted": ["luxnix-data"]}, "cannot convert"),
     ],
 )
 def test_layout_that_would_break_is_refused_at_planning(changes, message):
@@ -509,3 +509,145 @@ def test_a_failed_erase_is_reported_without_ending_the_conversion(monkeypatch):
     probes(monkeypatch, (0, "swap\n"))
     assert in_place.erase_plaintext_swap(["/a"]) == ([], ["/a"])
 
+
+def test_gc10_independent_secondary_layout_is_accepted():
+    secondary = [
+        {"name": "luxnix-app-storage", "device": "/dev/data", "fs_type": "btrfs"}
+    ]
+    migration.validate_in_place(
+        {
+            "in_place": layout(
+                other_encrypted=["luxnix-app-storage"], secondary=secondary
+            )
+        }
+    )
+    secondary[0]["fs_type"] = "ext4"
+    with pytest.raises(migration.MigrationError):
+        migration.validate_in_place(
+            {
+                "in_place": layout(
+                    other_encrypted=["luxnix-app-storage"], secondary=secondary
+                )
+            }
+        )
+
+
+def test_multidisk_preflight_rejects_capacity_on_data_disk(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    system, data, source = (tmp_path / p for p in ("system", "data", "container"))
+    for path in (system, data / "storage", source / "application"):
+        path.mkdir(parents=True)
+    (data / "storage/app.luks").touch()
+    mounts = {
+        "/": {"device": "/dev/mapper/cryptroot", "options": ["subvol=root"]},
+        "/data": {"device": "/dev/mapper/app", "options": ["subvol=storage"]},
+        "/var/lib/app": {
+            "device": "/dev/mapper/app",
+            "options": ["subvol=application"],
+        },
+    }
+
+    @contextmanager
+    def tops(*a, **k):
+        yield {"/dev/mapper/cryptroot": system, "/dev/mapper/app": data}
+
+    @contextmanager
+    def container(path, *a):
+        assert path == data / "storage/app.luks"
+        yield source
+
+    monkeypatch.setattr(in_place, "volume_tops", tops)
+    monkeypatch.setattr(in_place, "opened_container", container)
+    monkeypatch.setattr(in_place, "run", lambda *a: "100 source")
+    monkeypatch.setattr(
+        in_place, "free_bytes", lambda top: 10**12 if top == system else 1
+    )
+    value = layout(
+        containers=[{"name": "app", "container": "/data/app.luks"}],
+        binds={"/var/lib/app": {"volume": "app", "directory": "application"}},
+    )
+    with pytest.raises(in_place.InPlaceError, match="lacks space"):
+        in_place.preflight_volumes([], value, mounts, b"passphrase", {"app": b"old"})
+
+
+def test_multidisk_source_failure_never_starts_encryption(monkeypatch, tmp_path):
+    value = layout(secondary=[{"name": "app", "device": "/dev/data"}])
+    monkeypatch.setattr(in_place, "root_state", lambda d: in_place.PLAINTEXT)
+
+    def refuse(*a):
+        raise in_place.InPlaceError("missing source")
+
+    monkeypatch.setattr(in_place, "preflight_volumes", refuse)
+    monkeypatch.setattr(
+        in_place, "encrypt", lambda *a, **k: pytest.fail("no encryption")
+    )
+    with pytest.raises(in_place.InPlaceError, match="missing source"):
+        in_place.convert(
+            value,
+            {},
+            root_passphrase=b"safe passphrase",
+            container_passphrases={},
+            root=tmp_path,
+        )
+
+
+def test_secondary_key_resume_reuses_existing_key(tmp_path, monkeypatch):
+    volume = {"name": "app", "device": "/dev/data"}
+    key = tmp_path / "etc/luks-keys/app.key"
+    key.parent.mkdir(parents=True)
+    key.write_bytes(bytes(range(64)))
+    key.chmod(0o600)
+    monkeypatch.setattr(boot, "encrypted_storage", lambda p: None)
+    monkeypatch.setattr(boot, "verify_key", lambda *a: None)
+    monkeypatch.setattr(
+        in_place.boot_password, "accepts", lambda d, value: value == bytes(range(64))
+    )
+    monkeypatch.setattr(
+        in_place, "with_key", lambda *a, **k: pytest.fail("already enrolled")
+    )
+    in_place.enroll_secondary_keys([volume], tmp_path)
+    assert key.read_bytes() == bytes(range(64))
+
+
+def test_secondary_key_enrollment_and_verification(tmp_path, monkeypatch):
+    monkeypatch.setattr(boot, "encrypted_storage", lambda p: None)
+    monkeypatch.setattr(boot, "verify_key", lambda *a: None)
+    probes = iter([False, True])
+    monkeypatch.setattr(in_place.boot_password, "accepts", lambda *a: next(probes))
+    calls = []
+    monkeypatch.setattr(in_place, "with_key", lambda *a: calls.append(a))
+    in_place.enroll_secondary_keys(
+        [{"name": "app", "device": "/dev/data"}], tmp_path, b"recovery"
+    )
+    key = tmp_path / "etc/luks-keys/app.key"
+    assert len(key.read_bytes()) == 64
+    assert key.stat().st_mode & 0o777 == 0o600
+    assert calls == [(b"recovery", "luksAddKey", "/dev/data", str(key))]
+
+
+def test_secondary_key_helper_has_no_yaml_runtime_dependency():
+    source = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            """
+import sys, importlib.abc
+from pathlib import Path
+class NoYaml(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, *args):
+        if fullname == 'yaml':
+            raise ImportError('YAML is not part of this recovery runtime')
+sys.meta_path.insert(0, NoYaml())
+sys.path.insert(0, sys.argv[1])
+from lx_administration.storage.in_place import enroll_secondary_keys
+enroll_secondary_keys([], Path('/unused'))
+""",
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr

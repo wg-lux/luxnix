@@ -3,6 +3,7 @@
   pkgs,
   disko,
   repoRoot,
+  multidisk ? false,
 }:
 let
   inherit (pkgs) lib;
@@ -25,31 +26,50 @@ let
       };
     })
       {
-        disko.devices.disk.system = {
-          type = "disk";
-          inherit device;
-          content = {
-            type = "gpt";
-            partitions = {
-              ESP = {
-                size = "256M";
-                type = "EF00";
-                content = {
-                  type = "filesystem";
-                  format = "vfat";
-                  mountpoint = "/boot";
+        disko.devices.disk =
+          (lib.optionalAttrs multidisk {
+            data = {
+              type = "disk";
+              device = "/dev/disk/by-id/virtio-fresh-data";
+              content = {
+                type = "gpt";
+                partitions.payload = {
+                  size = "100%";
+                  content = {
+                    type = "btrfs";
+                    subvolumes.application.mountpoint = "/var/lib/lx-annotate";
+                  };
                 };
               };
-              root = {
-                size = "100%";
-                content = {
-                  type = "btrfs";
-                  subvolumes.root.mountpoint = "/";
+            };
+          })
+          // {
+            system = {
+              type = "disk";
+              inherit device;
+              content = {
+                type = "gpt";
+                partitions = {
+                  ESP = {
+                    size = "256M";
+                    type = "EF00";
+                    content = {
+                      type = "filesystem";
+                      format = "vfat";
+                      mountpoint = "/boot";
+                    };
+                  };
+                  root = {
+                    size = "100%";
+                    content = {
+                      type = "btrfs";
+                      subvolumes.root.mountpoint = "/";
+                    };
+                  };
                 };
               };
             };
           };
-        };
       };
   target = import (pkgs.path + "/nixos/lib/eval-config.nix") {
     system = pkgs.stdenv.hostPlatform.system;
@@ -70,6 +90,7 @@ let
           initrd.systemd.enable = true;
           kernelParams = [ "console=ttyS0" ];
         };
+        environment.etc.crypttab.text = lib.mkIf multidisk "luxnix-app-storage /dev/disk/by-partlabel/disk-data-payload /etc/luks-keys/luxnix-app-storage.key luks\n";
         users.mutableUsers = false;
         users.users.admin = {
           isNormalUser = true;
@@ -102,6 +123,13 @@ let
           serial = "fresh-target";
           size_bytes = 8589934592;
         }
+      ]
+      ++ lib.optionals multidisk [
+        {
+          path = "/dev/disk/by-id/virtio-fresh-data";
+          serial = "fresh-data";
+          size_bytes = 2147483648;
+        }
       ];
     };
     source = {
@@ -109,16 +137,28 @@ let
       lock_sha256 = "vm-fixture";
     };
     config = {
-      disks.system = device;
+      disks = {
+        system = device;
+      }
+      // lib.optionalAttrs multidisk {
+        data = "/dev/disk/by-id/virtio-fresh-data";
+      };
       closure = toString c.system.build.toplevel;
       mounts = builtins.mapAttrs (_: m: { inherit (m) device fsType options; }) c.fileSystems;
-      crypttab = "";
+      crypttab = c.environment.etc.crypttab.text or "";
       secure_boot = false;
       remote_unlock.enable = false;
       in_place = {
         root_fs_type = "btrfs";
         arrays = [ ];
-        other_encrypted = [ ];
+        other_encrypted = lib.optional multidisk "luxnix-app-storage";
+        secondary = lib.optionals multidisk [
+          {
+            name = "luxnix-app-storage";
+            device = "/dev/disk/by-partlabel/disk-data-payload";
+            fs_type = "btrfs";
+          }
+        ];
       };
       admin = {
         name = "admin";
@@ -143,7 +183,7 @@ let
     source = repoRoot;
     inherit (c.system.build) diskoScript;
     closure = c.system.build.toplevel;
-    disk = c.disko.devices.disk.system;
+    disks = c.disko.devices.disk;
   };
   interact = pkgs.writeText "fresh-install-interact.py" ''
     import json, os, signal, time
@@ -167,11 +207,12 @@ let
     child.expect("Admin password for this host")
     child.sendline("vm-password")
     child.expect("to authorize this installation:")
-    child.sendline("ERASE fresh-test fresh-target")
-    child.expect("Enter password for .*:")
-    child.sendline("vm-disk-password")
-    child.expect("again to be safe:")
-    child.sendline("vm-disk-password")
+    child.sendline("ERASE fresh-test fresh-target${lib.optionalString multidisk " fresh-data"}")
+    for _ in range(${if multidisk then "2" else "1"}):
+        child.expect("Enter password for .*:")
+        child.sendline("vm-disk-password")
+        child.expect("again to be safe:")
+        child.sendline("vm-disk-password")
     wait_stage(child, "storage-ready")
     original_mounts = record()["mounts"]
     child.kill(signal.SIGKILL)
@@ -182,7 +223,11 @@ let
     child.expect("Admin password for this host")
     child.sendline("vm-password")
     child.expect("to authorize this installation:")
-    child.sendline("RESUME fresh-test fresh-target")
+    child.sendline("RESUME fresh-test fresh-target${lib.optionalString multidisk " fresh-data"}")
+    ${lib.optionalString multidisk ''
+      child.expect("Existing disk passphrase for luxnix-app-storage:")
+      child.sendline("vm-disk-password")
+    ''}
     wait_stage(child, "installing")
     until = time.monotonic() + 10
     installer = None
@@ -210,7 +255,7 @@ let
     child.expect("Admin password for this host")
     child.sendline("vm-password")
     child.expect("to authorize this installation:")
-    child.sendline("RESUME fresh-test fresh-target")
+    child.sendline("RESUME fresh-test fresh-target${lib.optionalString multidisk " fresh-data"}")
     child.expect("cold-boot acceptance is still pending")
     child.expect(pexpect.EOF)
     child.close()
@@ -221,7 +266,7 @@ let
   '';
 in
 pkgs.testers.runNixOSTest {
-  name = "fresh-encrypted-install";
+  name = "fresh-encrypted-install${lib.optionalString multidisk "-multidisk"}";
   nodes.machine = {
     documentation.enable = false;
     virtualisation = {
@@ -236,6 +281,12 @@ pkgs.testers.runNixOSTest {
         {
           size = 128;
           driveConfig.deviceExtraOpts.serial = "fresh-custody";
+        }
+      ]
+      ++ lib.optionals multidisk [
+        {
+          size = 2048;
+          driveConfig.deviceExtraOpts.serial = "fresh-data";
         }
       ];
     };
@@ -270,6 +321,10 @@ pkgs.testers.runNixOSTest {
       "-drive", "if=pflash,format=raw,unit=0,readonly=on,file=${pkgs.OVMF.firmware}",
       "-drive", "if=pflash,format=raw,unit=1,readonly=on,file=${pkgs.OVMF.variables}",
     ]
+    ${lib.optionalString multidisk ''
+      command += ["-drive", f"file={original.state_dir}/empty2.qcow2,if=none,id=data",
+                  "-device", "virtio-blk-pci,drive=data,serial=fresh-data"]
+    ''}
     booted = create_machine(start_command=shlex.join(command), name="installed")
     driver.machines_qemu.append(booted)
     booted.start()
@@ -277,6 +332,10 @@ pkgs.testers.runNixOSTest {
     booted.send_chars("vm-disk-password\n")
     booted.wait_for_unit("multi-user.target")
     booted.succeed("cryptsetup status cryptroot | grep LUKS2")
+    ${lib.optionalString multidisk ''
+      booted.succeed("cryptsetup status luxnix-app-storage | grep LUKS2")
+      booted.succeed("findmnt -no SOURCE /var/lib/lx-annotate | grep luxnix-app-storage")
+    ''}
     booted.succeed("printf 'vm-password\\n' | pamtester login admin authenticate")
   '';
 }

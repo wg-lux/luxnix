@@ -61,6 +61,20 @@ sudo journalctl -b -u nginx.service -u redis-lx-annotate.service -u postgresql.s
 
 ## Startup chain
 
+After a container-to-boot-LUKS migration, dependency waits for
+`/dev/mapper/luxnix-secrets` or `luxnix-app-storage` indicate retained native mount
+units or drop-ins, even when the generated configuration no longer declares
+containers. Follow the [legacy override review](../../../../docs/boot-storage-migration.md#legacy-mount-overrides);
+preserve backups and encrypted-root guards rather than recreating the containers.
+
+If wheel preparation reports `category=resolver_error` and pip fails in
+`load_verify_locations` with `FileNotFoundError`, inspect the virtualenv's
+`certifi/cacert.pem` and `pip/_vendor/certifi/cacert.pem` links. A collected
+Nix-store CA bundle can break pip before its request-level CA environment is
+applied. The wheel-preparation unit repairs dangling store links to the configured
+system CA bundle before resolving and after installing packages. Keep TLS
+verification enabled; do not use `--trusted-host` or remove package-version guards.
+
 The startup-critical LX-Annotate units log to the `lx-annotate` journal
 namespace. Read it as a single boot-ordered stream to find the first unit that
 failed or delayed startup:

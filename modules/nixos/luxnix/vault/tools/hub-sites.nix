@@ -10,6 +10,7 @@ with lib;
 with lib.luxnix;
 let
   inherit (ctx)
+    vaultCli
     verifySecretStorage
     serverCfg
     hubPkiCfg
@@ -40,7 +41,7 @@ let
     runtimeInputs = [
       pkgs.coreutils
       pkgs.jq
-      pkgs.vault
+      vaultCli
       pkgs.util-linux
     ];
     text = ''
@@ -161,6 +162,15 @@ let
           '}' \
           "path \"$kv_mount/data/$oidc_client_secret_kv_path\" {" \
           '  capabilities = ["read"]' \
+          '}' \
+          "path \"$kv_mount/data/shared/*\" {" \
+          '  capabilities = ["read"]' \
+          '}' \
+          "path \"$kv_mount/data/hosts/$node_fqdn/*\" {" \
+          '  capabilities = ["read"]' \
+          '}' \
+          'path "auth/token/renew-self" {' \
+          '  capabilities = ["update"]' \
           '}' > "$policy_file"
         if [ -n "$center_key" ]; then
           ${pkgs.coreutils}/bin/printf '%s\n' \
@@ -203,7 +213,7 @@ let
       pkgs.coreutils
       pkgs.gnugrep
       pkgs.jq
-      pkgs.vault
+      vaultCli
     ];
     text = ''
       set -euo pipefail
@@ -263,10 +273,164 @@ let
     '';
   };
 
+  # Generic operator publication: one record, one field, value never on argv.
+  secretPublishTool = pkgs.writeShellApplication {
+    name = "luxnix-vault-publish-secret";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.jq
+      vaultCli
+    ];
+    text = ''
+      set -euo pipefail
+      umask 077
+      ulimit -c 0
+
+      usage() {
+        echo "Usage: luxnix-vault-publish-secret (--shared | --host <site-node-fqdn>) <name> [--field <field>] [--multiline] < value" >&2
+        echo "Without piped input the value is read at a hidden prompt (single line only)." >&2
+        exit 2
+      }
+      scope=""
+      name=""
+      field="value"
+      multiline=0
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --shared) scope="shared"; shift ;;
+          --host) scope="hosts/''${2:-}"; shift 2 || usage ;;
+          --field) field="''${2:-}"; shift 2 || usage ;;
+          --multiline) multiline=1; shift ;;
+          -*) usage ;;
+          *) [ -z "$name" ] || usage; name="$1"; shift ;;
+        esac
+      done
+      valid='^[A-Za-z0-9_][A-Za-z0-9_.-]*$'
+      if [ -z "$scope" ] || ! [[ "$name" =~ $valid ]] || ! [[ "$field" =~ $valid ]]; then
+        usage
+      fi
+      case "$scope" in
+        shared) ;;
+        hosts/*)
+          case "''${scope#hosts/}" in
+            ""|*[!a-z0-9.-]*|.*|*..*|*.) echo "ERROR: --host needs a valid site node FQDN." >&2; exit 2 ;;
+          esac
+          ;;
+      esac
+      if [ -z "''${VAULT_ADDR:-}" ] || [ -z "''${VAULT_TOKEN:-}" ]; then
+        echo "VAULT_ADDR and a short-lived administrative VAULT_TOKEN are required." >&2
+        exit 1
+      fi
+
+      kv_path=${lib.escapeShellArg hubPkiCfg.kvMountPath}/"$scope/$name"
+      value_file="$(mktemp)"
+      state_file="$(mktemp)"
+      error_file="$(mktemp)"
+      trap 'rm -f "$value_file" "$state_file" "$error_file"' EXIT
+
+      if [ -t 0 ]; then
+        [ "$multiline" = 0 ] || { echo "ERROR: --multiline requires piped input." >&2; exit 2; }
+        IFS= read -r -s -p "Secret value for $scope/$name: " secret || true
+        echo >&2
+        printf '%s' "$secret" > "$value_file"
+        unset secret
+      elif [ "$multiline" = 1 ]; then
+        cat > "$value_file"
+      else
+        IFS= read -r secret || true
+        printf '%s' "$secret" > "$value_file"
+        unset secret
+      fi
+      if ! grep -q '[^[:space:]]' "$value_file"; then
+        echo "ERROR: refusing to publish an empty secret." >&2
+        exit 1
+      fi
+
+      if vault kv get -format=json "$kv_path" > "$state_file" 2> "$error_file"; then
+        version="$(jq -er '.data.metadata.version' "$state_file")"
+        if jq -e --arg field "$field" --rawfile value "$value_file" \
+          '.data.data[$field] == $value' "$state_file" >/dev/null; then
+          echo "The hub already holds this value at $kv_path (version $version)."
+          exit 0
+        fi
+        if [ "''${LUXNIX_VAULT_ALLOW_SECRET_ROTATION:-0}" != "1" ]; then
+          echo "ERROR: $kv_path already holds a different value; refusing implicit rotation." >&2
+          echo "Rerun with LUXNIX_VAULT_ALLOW_SECRET_ROTATION=1 once every consumer may receive the new value." >&2
+          exit 1
+        fi
+        cas="$version"
+      else
+        # A permission or connection error is never treated as an absent secret.
+        if ! grep -Fq 'No value found at' "$error_file"; then
+          echo "ERROR: lookup of $kv_path failed; refusing to publish." >&2
+          exit 1
+        fi
+        cas=0
+      fi
+
+      vault kv put -cas="$cas" "$kv_path" "$field=@$value_file" >/dev/null
+      echo "Published $kv_path (check-and-set $cas). Enrolled hosts declaring it fetch it at their next refresh."
+    '';
+  };
+
+  # Token-based hosts: one renewable orphan token bound to the reconciled site policy.
+  # Containment replaces that policy with a deny rule, which also disarms this token.
+  siteTokenIssueTool = pkgs.writeShellApplication {
+    name = "luxnix-vault-issue-site-token";
+    runtimeInputs = [
+      hubSitesReconcileTool
+      pkgs.coreutils
+      pkgs.openssl
+      vaultCli
+    ];
+    text = ''
+      set -euo pipefail
+      umask 077
+      ulimit -c 0
+
+      if [ "$#" -ne 2 ]; then
+        echo "Usage: luxnix-vault-issue-site-token <site-node-fqdn> <output-directory>" >&2
+        exit 2
+      fi
+      if [ -z "''${VAULT_ADDR:-}" ] || [ -z "''${VAULT_TOKEN:-}" ]; then
+        echo "VAULT_ADDR and a short-lived administrative VAULT_TOKEN are required." >&2
+        exit 1
+      fi
+      node_fqdn="$1"
+      output_directory="$2"
+
+      # Validates the name, refuses contained sites and writes the scoped policy.
+      luxnix-vault-reconcile-hub-sites "$node_fqdn" >/dev/null
+      role="site-$(printf '%s' "$node_fqdn" | tr '.-' '__')"
+
+      ${verifySecretStorage} "$output_directory"
+      install -d -m 0700 "$output_directory"
+      if [ -e "$output_directory/site-token" ]; then
+        echo "ERROR: $output_directory already holds a site token; use an empty directory." >&2
+        exit 1
+      fi
+      token_tmp="$(mktemp "$output_directory/.site-token.XXXXXX")"
+      trap 'rm -f "$token_tmp"' EXIT
+      vault token create -orphan -field=token \
+        -policy="lx-hub-$role" \
+        -period=${lib.escapeShellArg hubPkiCfg.siteTokenPeriod} \
+        -display-name="$role" > "$token_tmp"
+      [ -s "$token_tmp" ] || { echo "ERROR: the hub returned an empty token." >&2; exit 1; }
+      chmod 0400 "$token_tmp"
+      install -m 0400 ${lib.escapeShellArg (toString serverCfg.caCertFile)} "$output_directory/vault-server-ca.pem"
+      mv -f "$token_tmp" "$output_directory/site-token"
+      trap - EXIT
+      fingerprint="$(openssl x509 -in "$output_directory/vault-server-ca.pem" -noout -fingerprint -sha256 | cut -d= -f2)"
+      echo "Site token for $role created in $output_directory. Transfer it through an approved secret-delivery channel."
+      echo "Server CA SHA-256: $fingerprint"
+    '';
+  };
+
   hubSiteLifecycleTool = pkgs.writeShellApplication {
     name = "luxnix-vault-site-lifecycle";
     runtimeInputs = [
-      pkgs.vault
+      vaultCli
       pkgs.python3
     ];
     text = ''
@@ -286,7 +450,7 @@ let
       pkgs.gnugrep
       pkgs.jq
       pkgs.openssl
-      pkgs.vault
+      vaultCli
     ];
     text = ''
       set -euo pipefail
@@ -402,6 +566,8 @@ in
   inherit
     hubSitesReconcileTool
     oidcClientSecretPublishTool
+    secretPublishTool
+    siteTokenIssueTool
     hubSiteLifecycleTool
     hubSiteEnrollmentTool
     ;

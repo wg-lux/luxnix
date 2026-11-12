@@ -6,8 +6,10 @@
   pkgs,
   disko,
   repoRoot,
+  multidisk ? false,
 }:
 let
+  dataPartition = "/dev/disk/by-partlabel/disk-data-payload";
   rootPartition = "/dev/disk/by-partlabel/disk-system-root";
   swapPartition = "/dev/disk/by-partlabel/disk-system-oldswap";
   subvolumeOptions = name: [ "subvol=${name}" ];
@@ -20,10 +22,15 @@ let
     layout = {
         "root_device": "${rootPartition}",
         "swap_partitions": ["${swapPartition}"],
+        "secondary": ${
+          if multidisk then ''[{"name": "luxnix-app-storage", "device": "${dataPartition}"}]'' else "[]"
+        },
         "containers": [
             {"name": "luxnix-secrets", "container": "/var/lib/luxnix-secrets.luks",
              "mountPoint": "/var/lib/luxnix-secrets", "fsType": "ext4"},
-            {"name": "luxnix-app-storage", "container": "/var/lib/luxnix-app-storage.luks",
+            {"name": "luxnix-app-storage", "container": "${
+              if multidisk then "/data/raid01" else "/var/lib"
+            }/luxnix-app-storage.luks",
              "mountPoint": "/var/lib/luxnix-app-storage", "fsType": "ext4"},
         ],
         "binds": {
@@ -38,6 +45,12 @@ let
         "/home": {"device": "/dev/mapper/cryptroot", "fsType": "btrfs", "options": ["subvol=home"]},
         "/boot": {"device": "/dev/disk/by-partlabel/disk-system-ESP", "fsType": "vfat", "options": []},
     }
+    ${pkgs.lib.optionalString multidisk ''
+      mounts.update({
+          "/data/raid01": {"device": "/dev/mapper/luxnix-app-storage", "fsType": "btrfs", "options": ["subvol=storage"]},
+          "/var/lib/lx-annotate": {"device": "/dev/mapper/luxnix-app-storage", "fsType": "btrfs", "options": ["subvol=application"]},
+      })
+    ''}
     command = sys.argv[1]
     if command == "state":
         print(p.root_state(layout["root_device"]))
@@ -49,7 +62,7 @@ let
         print(p.convert(layout, mounts, root_passphrase=b"secretsecret",
                         container_passphrases=passphrases))
     elif command == "retire":
-        print(p.retire_containers(layout["containers"], layout["binds"]))
+        print(p.retire_containers(layout["containers"], layout["binds"], mounts))
     elif command == "bad-passphrase":
         try:
             p.check_passphrase(b"secretsecretyz")
@@ -65,51 +78,82 @@ let
     pkgs.util-linux
   ];
   raw = {
-    disko.devices.disk.system = {
-      type = "disk";
-      device = "/dev/vda";
-      content = {
-        type = "gpt";
-        partitions = {
-          ESP = {
-            size = "256M";
-            type = "EF00";
-            content = {
-              type = "filesystem";
-              format = "vfat";
-              mountpoint = "/boot";
+    disko.devices.disk =
+      (pkgs.lib.optionalAttrs multidisk {
+        data = {
+          type = "disk";
+          device = "/dev/vdb";
+          content = {
+            type = "gpt";
+            partitions.payload = {
+              size = "100%";
+              content = {
+                type = "luks";
+                name = "luxnix-app-storage";
+                initrdUnlock = false;
+                passwordFile = "/tmp/secret.key";
+                extraFormatArgs = [
+                  "--type"
+                  "luks2"
+                ];
+                content = {
+                  type = "btrfs";
+                  subvolumes.storage.mountpoint = "/data/raid01";
+                  subvolumes.application.mountpoint = "/var/lib/lx-annotate";
+                };
+              };
             };
           };
-          # An old plaintext swap partition the configuration no longer uses.
-          oldswap = {
-            size = "64M";
-            type = "8200";
-          };
-          root = {
-            size = "100%";
-            content = {
-              type = "luks";
-              name = "cryptroot";
-              passwordFile = "/tmp/secret.key";
-              extraFormatArgs = [
-                "--type"
-                "luks2"
-              ];
-              content = {
-                type = "btrfs";
-                extraArgs = [ "-f" ];
-                subvolumes = {
-                  root = {
-                    mountpoint = "/";
-                    mountOptions = subvolumeOptions "root";
-                  };
-                  nix = {
-                    mountpoint = "/nix";
-                    mountOptions = subvolumeOptions "nix";
-                  };
-                  home = {
-                    mountpoint = "/home";
-                    mountOptions = subvolumeOptions "home";
+        };
+      })
+      // {
+        system = {
+          type = "disk";
+          device = "/dev/vda";
+          content = {
+            type = "gpt";
+            partitions = {
+              ESP = {
+                size = "256M";
+                type = "EF00";
+                content = {
+                  type = "filesystem";
+                  format = "vfat";
+                  mountpoint = "/boot";
+                };
+              };
+              # An old plaintext swap partition the configuration no longer uses.
+              oldswap = {
+                size = "64M";
+                type = "8200";
+              };
+              root = {
+                size = "100%";
+                content = {
+                  type = "luks";
+                  name = "cryptroot";
+                  passwordFile = "/tmp/secret.key";
+                  extraFormatArgs = [
+                    "--type"
+                    "luks2"
+                  ];
+                  content = {
+                    type = "btrfs";
+                    extraArgs = [ "-f" ];
+                    subvolumes = {
+                      root = {
+                        mountpoint = "/";
+                        mountOptions = subvolumeOptions "root";
+                      };
+                      nix = {
+                        mountpoint = "/nix";
+                        mountOptions = subvolumeOptions "nix";
+                      };
+                      home = {
+                        mountpoint = "/home";
+                        mountOptions = subvolumeOptions "home";
+                      };
+                    };
                   };
                 };
               };
@@ -117,12 +161,11 @@ let
           };
         };
       };
-    };
   };
 in
 disko.lib.testLib.makeDiskoTest {
   inherit pkgs;
-  name = "boot-storage-in-place";
+  name = "boot-storage-in-place${pkgs.lib.optionalString multidisk "-multidisk"}";
   disko-config = raw;
   enableOCR = true;
   extraInstallerConfig = {
@@ -133,6 +176,10 @@ disko.lib.testLib.makeDiskoTest {
 
     # Replace what the harness formatted with the plaintext host we migrate from.
     machine.succeed("umount -R /mnt; cryptsetup close cryptroot")
+    ${pkgs.lib.optionalString multidisk ''
+      machine.succeed("cryptsetup close luxnix-app-storage; wipefs -a ${dataPartition}; mkfs.btrfs -f ${dataPartition}")
+      machine.succeed("mkdir -p /plain-data; mount -o subvolid=5 ${dataPartition} /plain-data; btrfs subvolume create /plain-data/storage")
+    ''}
     machine.succeed("wipefs -a ${rootPartition}; mkswap ${swapPartition}")
     machine.succeed("mkfs.btrfs -f -L nixos ${rootPartition}")
     machine.succeed("mkdir -p /plain; mount -o subvolid=5 ${rootPartition} /plain")
@@ -146,7 +193,9 @@ disko.lib.testLib.makeDiskoTest {
     machine.succeed("echo PLAINTEXT-MARKER-HOME-7f3a > /plain/home/admin/marker")
 
     def make_container(name, passphrase, directories):
-        path = "/plain/root/var/lib/" + name + ".luks"
+        path = ("/plain-data/storage/" if ${
+          if multidisk then "True" else "False"
+        } and name == "luxnix-app-storage" else "/plain/root/var/lib/") + name + ".luks"
         machine.succeed("truncate -s 96M " + path)
         machine.succeed(f"printf %s {passphrase} | cryptsetup luksFormat --type luks2 --batch-mode --pbkdf-memory 32768 --key-file - {path}")
         machine.succeed(f"printf %s {passphrase} | cryptsetup open --key-file - {path} {name}")
@@ -167,6 +216,7 @@ disko.lib.testLib.makeDiskoTest {
     close_container("luxnix-app-storage")
     machine.succeed("sha256sum /plain/home/admin/data.bin | cut -d' ' -f1 > /tmp/data.sha")
     data_sha = machine.succeed("cat /tmp/data.sha").strip()
+    ${pkgs.lib.optionalString multidisk ''machine.succeed("umount /plain-data")''}
     machine.succeed("umount /plain; sync")
 
     # An unsafe passphrase is refused, and so is a wrong container passphrase,
@@ -194,7 +244,9 @@ disko.lib.testLib.makeDiskoTest {
     machine.succeed("grep -x PLAINTEXT-MARKER-HOME-7f3a /mnt/home/admin/marker")
     machine.succeed("grep -x host-issued-salt-value /mnt/etc/secrets/vault/lx_annotate_identity_active")
     machine.succeed("grep -x proprietary-record /mnt/var/lib/lx-annotate/data/record")
-    machine.succeed("grep -x stale /mnt/var/lib/lx-annotate.pre-consolidation/stale")
+    ${pkgs.lib.optionalString (
+      !multidisk
+    ) ''machine.succeed("grep -x stale /mnt/var/lib/lx-annotate.pre-consolidation/stale")''}
     machine.fail("mountpoint -q /mnt/etc/secrets/vault")
     machine.fail("test -e /dev/mapper/luxnix-consolidate-luxnix-secrets")
     # Containers are untouched until they are retired after acceptance.
@@ -293,7 +345,9 @@ disko.lib.testLib.makeDiskoTest {
     machine.fail("test -e /dev/mapper/luxnix-secrets")
     machine.fail("mountpoint -q /etc/secrets/vault")
     machine.succeed("findmnt -no SOURCE --target /etc/secrets/vault | grep cryptroot")
-    machine.succeed("findmnt -no SOURCE --target /var/lib/lx-annotate | grep cryptroot")
+    machine.succeed("findmnt -no SOURCE --target /var/lib/lx-annotate | grep ${
+      if multidisk then "luxnix-app-storage" else "cryptroot"
+    }")
     machine.succeed("luxnix-verify-boot-storage")
     machine.succeed("luxnix-setup-root-encryption --setup-password")
     machine.succeed("cryptsetup --version")
@@ -313,10 +367,12 @@ disko.lib.testLib.makeDiskoTest {
     assert int(machine.succeed("grep -c started /var/lib/lx-annotate/data/starts").strip()) == 2
 
     # Retiring deletes only the container files; everything keeps working after it.
-    machine.succeed("test -f /var/lib/luxnix-secrets.luks; test -f /var/lib/luxnix-app-storage.luks")
+    machine.succeed("test -f /var/lib/luxnix-secrets.luks; test -f ${
+      if multidisk then "/data/raid01" else "/var/lib"
+    }/luxnix-app-storage.luks")
     machine.succeed("python3 /etc/in-place-driver.py retire")
     machine.fail("test -e /var/lib/luxnix-secrets.luks")
-    machine.fail("test -e /var/lib/luxnix-app-storage.luks")
+    machine.fail("test -e ${if multidisk then "/data/raid01" else "/var/lib"}/luxnix-app-storage.luks")
     machine.succeed("grep -x host-issued-salt-value /etc/secrets/vault/lx_annotate_identity_active")
     machine.shutdown()
     machine.start()

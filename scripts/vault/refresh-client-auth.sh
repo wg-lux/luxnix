@@ -12,6 +12,8 @@ refresh_client_auth() {
       '{role_id: ($role | rtrimstr("\n")), secret_id: ($secret | rtrimstr("\n"))}' \
       | vault write -field=token auth/approle/login - 2>"$auth_error")"; then
     auth_state="$("$VAULT_AUTH_ERROR_CLASSIFIER" "$auth_error")" || auth_state=vault-error
+    # Lets callers tell a hub outage from a rejected identity.
+    export VAULT_AUTH_STATE="$auth_state"
     rm -f -- "$auth_error"
     echo "ERROR: fresh Vault AppRole authentication failed (state: $auth_state)." >&2
     case "$auth_state" in

@@ -89,7 +89,8 @@ def test_common_and_worker_environment_agree(enabled, provider, url):
           }];
         };
         cfg = {
-          django = { identitySaltKeyringFile = null; identitySaltFile = null; };
+          django = { centerIdentitySalt = false; identitySaltKeyringFile = null; identitySaltFile = null; };
+          remoteAccess.machines = [];
           runtime = system.config.services.luxnix.lxAnnotateLocal.runtime // {
             monitoring.enable = false;
             extraEnvironment = { LLM_ENABLED = "conflicting-legacy-value"; };
@@ -119,6 +120,7 @@ def test_common_and_worker_environment_agree(enabled, provider, url):
     '''.replace("VALUES", json.dumps(json.dumps(values))))
     expected = {
         "LLM_ENABLED": str(enabled).lower(), "LLM_PROVIDER": provider,
+        "REPORT_LLM_DRAFTING_ENABLED": str(enabled).lower(),
         "LLM_BASE_URL": url, "LLM_MODEL": "configured-model", "LLM_TIMEOUT": "45",
         "LLM_CA_FILE": "/run/secrets/llm-ca", "LLM_CLIENT_CERT_FILE": "/run/secrets/llm-cert",
         "LLM_CLIENT_KEY_FILE": "/run/secrets/llm-key",

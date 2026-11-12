@@ -10,11 +10,12 @@ import subprocess
 from pydantic import BaseModel, ConfigDict
 
 from lx_administration.storage import boot_migration as migration
+from lx_administration.storage.migration_boot import RECOVERY_FILESYSTEMS
 
 MOUNT = Path("/recovery")
 STATE_ROOT = MOUNT / "luxnix-state"
 MIN_FREE = 1024**3  # Metadata headroom, not an application-backup size estimate.
-FILESYSTEMS = {"ext4", "xfs", "btrfs"}
+FILESYSTEMS = set(RECOVERY_FILESYSTEMS)
 
 
 class Medium(BaseModel):

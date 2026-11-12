@@ -6,7 +6,6 @@ let
   python = pkgs.python3.withPackages (ps: [ ps.pyyaml ]);
   centerKey = config.roles.endoreg-client.defaultCenterKey;
   centerSaltFile = "/etc/secrets/vault/lx_annotate_center_${centerKey}_identity";
-  centerSaltPath = "${config.luxnix.vault.client.hubPki.kvMountPath}/centers/${centerKey}/identity";
   provisioner = pkgs.runCommand "identity-salt-provisioner" { } ''
     mkdir -p "$out"
     cp ${../../../../../scripts/provision-identity-salts.py} "$out/provision-identity-salts.py"
@@ -41,11 +40,14 @@ mkIf (cfg.django.enrollLegacyDefaultSalt && !cfg.django.identitySaltViaSecretSpe
         description = "Vault-managed center identity salt";
         customScript = true;
         refreshOnBoot = true;
-        generator = ''
-          # Vault being unreachable must not stop the host; it keeps its local salts.
-          ${pkgs.vault}/bin/vault kv get -field=salt ${lib.escapeShellArg centerSaltPath} > "$TARGET_FILE" \
-            || : > "$TARGET_FILE"
-        '';
+        # The hub being unreachable must not stop the host: the last accepted center
+        # salt stays deployed; without one the file is empty and local salts apply.
+        generator = config.luxnix.vault.client.fetchSecretScript {
+          name = "lx_annotate_center_identity_source";
+          kvPath = "centers/${centerKey}/identity";
+          field = "salt";
+          emptyWhenUnavailable = true;
+        };
       };
   # Root-only recovery material is retained independently of prunable app snapshots.
   services.luxnix.lxAnnotateLocal.hub.backup.exclude = mkAfter [ ".identity-salt-recovery" ];

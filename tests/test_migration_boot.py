@@ -15,6 +15,8 @@ import pytest
 from lx_administration.storage import migration_boot as boot
 from lx_administration.yaml import load_unique_yaml_file
 
+RECOVERY_UUID = "11111111-2222-4222-8222-222222222222"
+
 
 @pytest.fixture
 def spec():
@@ -27,7 +29,7 @@ def spec():
         "gateway": None,
         "controller_cidr": "192.0.2.1/32",
         "authorized_keys": ["ssh-ed25519 AAAA test-fixture"],
-        "recovery": {"uuid": "1111-2222", "fstype": "vfat", "luks_uuid": None},
+        "recovery": {"uuid": RECOVERY_UUID, "fstype": "ext4", "luks_uuid": None},
         "target_serials": ["root-disk"],
         "policy": load_unique_yaml_file(Path("conf/migration-environment.yml")),
     }
@@ -104,8 +106,8 @@ def stage(tmp_path, monkeypatch, spec):
                     "filesystems": [
                         {
                             "source": "/dev/recovery",
-                            "uuid": "1111-2222",
-                            "fstype": "vfat",
+                            "uuid": "11111111-2222-4222-8222-222222222222",
+                            "fstype": "ext4",
                             "fsroot": "/",
                         }
                     ]
@@ -344,7 +346,7 @@ def test_recovery_identity_refusal_prevents_boot_changes(stage, monkeypatch, fai
                     {"blockdevices": [{"type": "disk", "serial": serial}]}
                 )
         if failure == "uuid" and command[0] == "findmnt" and args.recovery in command:
-            return result.replace("1111-2222", "3333-4444")
+            return result.replace(RECOVERY_UUID, "33333333-4444-4444-8444-444444444444")
         return result
 
     monkeypatch.setattr(boot.sb, "run", run)
@@ -452,7 +454,7 @@ def test_loader_orders_identity_copy_authentication_and_detach(tmp_path, failure
         }
         mount() { echo mount >> "$WORK/events"; }
         umount() { echo umount >> "$WORK/events"; [ "$FAILURE" != umount ]; }
-        if load_migration_payload "$WORK" 1111-2222 vfat "$HASH" "$SIZE" 1 target; then
+        if load_migration_payload "$WORK" "$UUID" btrfs "$HASH" "$SIZE" 1 target; then
             echo start-runtime >> "$WORK/events"
         else exit 1; fi
     """
@@ -464,6 +466,7 @@ def test_loader_orders_identity_copy_authentication_and_detach(tmp_path, failure
             **os.environ,
             "LOADER": str(Path("conf/migration-load.sh").resolve()),
             "WORK": str(tmp_path),
+            "UUID": RECOVERY_UUID,
             "FAILURE": failure or "",
             "HASH": expected,
             "SIZE": str(size),
@@ -567,9 +570,9 @@ def test_build_defaults_to_console_mode_without_signing(monkeypatch):
             "--controller-cidr",
             "192.0.2.1/32",
             "--recovery-uuid",
-            "1111-2222",
+            "11111111-2222-4222-8222-222222222222",
             "--recovery-fstype",
-            "vfat",
+            "ext4",
             "--output",
             "/unused",
         ]
@@ -598,13 +601,13 @@ def discovery(monkeypatch, spec):
             "filesystems": [
                 {
                     "source": "/dev/sdb1",
-                    "uuid": "1111-2222",
-                    "fstype": "vfat",
+                    "uuid": "11111111-2222-4222-8222-222222222222",
+                    "fstype": "ext4",
                     "fsroot": "/",
                 }
             ]
         },
-        "lsblk": {"blockdevices": [{"type": "part", "uuid": "1111-2222"}]},
+        "lsblk": {"blockdevices": [{"type": "part", "uuid": RECOVERY_UUID}]},
     }
 
     def run(*command):
@@ -624,7 +627,7 @@ def test_discovery_yaml_and_printed_command_roundtrip(discovery, capsys, monkeyp
     settings = yaml.safe_load(capsys.readouterr().out)
     assert settings["host"] == "test-host"
     assert settings["address"] == "192.0.2.10/24"
-    assert settings["recovery_uuid"] == "1111-2222"
+    assert settings["recovery_uuid"] == "11111111-2222-4222-8222-222222222222"
     selected = []
     monkeypatch.setattr(boot, "build", selected.append)
     boot.main(
@@ -696,8 +699,8 @@ def test_build_settings_bound_to_host_with_explicit_overrides(tmp_path, spec, fa
         "address": "192.0.2.10/24",
         "gateway": None,
         "controller_cidr": "192.0.2.1/32",
-        "recovery_uuid": "1111-2222",
-        "recovery_fstype": "vfat",
+        "recovery_uuid": "11111111-2222-4222-8222-222222222222",
+        "recovery_fstype": "ext4",
         "recovery_luks_uuid": None,
     }
     if failure == "host":
@@ -1402,3 +1405,23 @@ def test_store_tool_refuses_a_mutable_alias_to_a_store_binary(tmp_path, monkeypa
     monkeypatch.setattr(boot.shutil, "which", lambda name: str(alias))
     with pytest.raises(ValueError, match="from the Nix store is required"):
         boot.store_tool("cat")
+
+
+@pytest.mark.parametrize("fstype", ["ext4", "btrfs", "vfat", "xfs", "nfs"])
+def test_recovery_filesystems_agree_everywhere(spec, fstype):
+    """Planning, the RAM build and the loader accept the same recovery drives."""
+    from lx_administration.storage import recovery_media
+
+    supported = fstype in ("ext4", "btrfs")
+    assert (fstype in recovery_media.FILESYSTEMS) == supported
+    spec["recovery"]["fstype"] = fstype
+    if supported:
+        boot.validate_spec(spec)
+    else:
+        with pytest.raises(ValueError, match="ext4 or Btrfs"):
+            boot.validate_spec(spec)
+    loader = Path("conf/migration-load.sh").read_text()
+    assert (f"\n        {fstype}) options=ro," in loader) == supported
+    environment = Path("conf/migration-environment.nix").read_text()
+    if supported:
+        assert f'"{fstype}"' in environment.split("supportedFilesystems", 1)[1]

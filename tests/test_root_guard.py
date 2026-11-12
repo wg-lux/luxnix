@@ -481,8 +481,8 @@ def test_gc_09_contract_matches_its_disk_and_keeps_the_check():
     spec_ = state["spec"]
     assert state["check"] is True
     assert "env_keep-=NIXOS_NO_CHECK" in state["sudo"]
-    assert spec_["layout"] == "legacy-containers"
-    assert spec_["initrd"]["unlocks_root"] is False
+    assert spec_["layout"] == "boot-luks"
+    assert spec_["initrd"]["unlocks_root"] is True
     assert spec_["root"]["partition"] == PARTITION
     assert spec_["root"]["disk"].startswith("/dev/disk/by-id/nvme-Phison")
     assert {"/", "/home", "/nix", "/persist", "/var/log", "/boot"} <= spec_[
