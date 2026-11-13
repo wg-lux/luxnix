@@ -477,6 +477,13 @@
       startupServices = lib.filter (
         name: builtins.elem "multi-user.target" config.systemd.services.${name}.wantedBy
       ) (builtins.attrNames config.luxnix.storage.operatorUnlocked.guardedServices);
+
+      usbKeyUnlock = {
+        enable = true;
+        filesystemUuid = "C908-FCB4";
+        fsType = "vfat";
+      };
+
       volumes = { };
     };
 

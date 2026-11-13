@@ -29,5 +29,10 @@ host_luxnix:
   storage.operatorUnlocked.layout: '"boot-luks"'
   storage.operatorUnlocked.volumes: "{ }"
   storage.operatorUnlocked.bindMounts: "{ }"
+  # Stick LX-USB-02, enrolled with luxnix-setup-usb-unlock on 2026-11-13. It is
+  # a bearer credential for the gc-05 root disk; the passphrase stays valid.
+  storage.operatorUnlocked.usbKeyUnlock.enable: "true"
+  storage.operatorUnlocked.usbKeyUnlock.filesystemUuid: '"C908-FCB4"'
+  storage.operatorUnlocked.usbKeyUnlock.fsType: '"vfat"'
   # gc-05 is enrolled and must retain fail-closed Vault authentication.
   vault.client.auth.deferUntilProvisioned: "false"
