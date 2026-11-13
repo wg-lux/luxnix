@@ -172,9 +172,14 @@ let
     cp ${./scripts/wheel-downgrade-guard.py} "$out/guard.py"
     cp ${../../../../lx_administration/utils/file_operations.py} "$out/wheel_guard_file_operations.py"
   '';
+  # Interpolate the option value rather than wheelFilePath: toString on a local
+  # Nix path drops its store context, so the sandboxed check cannot read a wheel
+  # pinned from release-artifacts and fails with FileNotFoundError.
+  wheelStaticAssetCheckInput =
+    if cfg.runtime.wheelPath == null then "" else "${cfg.runtime.wheelPath}";
   wheelStaticAssetCheck = pkgs.runCommand "lx-annotate-wheel-static-check-${packageVersion}" { } ''
     ${pkgs.python3}/bin/python ${./scripts/wheel-static-check.py} \
-      --wheel ${lib.escapeShellArg wheelFilePath} --require-central-paths
+      --wheel ${lib.escapeShellArg wheelStaticAssetCheckInput} --require-central-paths
     touch "$out"
   '';
   wheelRuntimePackage = pkgs.runCommand "lx-annotate-wheel-runtime-${packageVersion}" { } ''
