@@ -110,6 +110,22 @@ the order to do them.
    keep the host on `legacy-containers`.
 4. **The host evaluates without failed assertions.**
 
+For a client without legacy container files, override the inherited migration
+metadata in its inventory `host_luxnix` section before generating a plan:
+
+```yaml
+host_luxnix:
+  storage.operatorUnlocked.layout: '"boot-luks"'
+  storage.operatorUnlocked.volumes: "{ }"
+  storage.operatorUnlocked.bindMounts: "{ }"
+```
+
+The planner reads `volumes` and `bindMounts` to select legacy data to consolidate;
+`boot-luks` alone does not clear them. Keep these entries for hosts whose existing
+containers hold data. Regenerate with Autoconf after changing inventory. A saved
+plan retains its original configuration; this change does not repair an existing
+plan or authorize replacing a started migration journal.
+
 Then follow the [two-machine migration](migration-environment.md#two-machines-the-standard-setup).
 
 ### Configuration and recovery media

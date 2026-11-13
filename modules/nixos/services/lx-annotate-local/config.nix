@@ -1609,6 +1609,7 @@ let
       ./subservices/lx-annotate-sap-import.nix
       ./subservices/lx-annotate-export-frames.nix
       ./subservices/lx-annotate.nix
+      ./subservices/lx-annotate-start-retry.nix
       ./subservices/lx-annotate-master-key-check.nix
       ./subservices/lx-annotate-preflight.nix
       ./subservices/lx-annotate-storage-migration.nix

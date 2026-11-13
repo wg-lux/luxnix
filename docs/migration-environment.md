@@ -74,9 +74,24 @@ Each step names where it runs.
    new host key from a second controller terminal:
 
    ```sh
-   scp admin@<target wired address>:migration-<host>-kexec/known_hosts \
-     ~/migration-<host>.known_hosts
+   mkdir -p /home/admin/migration-<host>-kexec
+   scp -o HostKeyAlias=<host> -o StrictHostKeyChecking=yes \
+     admin@<target wired address>:migration-<host>-kexec/known_hosts \
+     /home/admin/migration-<host>-kexec/known_hosts
    ```
+
+   Replace `<host>` with the client hostname and `<target wired address>` with
+   its Ethernet IPv4 address. These paths assume the controller account is
+   `admin`; use its actual home directory otherwise. `HostKeyAlias` checks the
+   installed client's key against the existing hostname pin when connecting by
+   IP. Verify that pin before proceeding if it is missing or mismatched.
+   Copy the file from this waiting run: each invocation generates a new RAM host
+   key. Do not reuse another client's file or start a second invocation.
+   Before confirming, ensure a separate SSH session to the client's wired
+   address succeeds from the controller. Check `ip route get <target wired address>`
+   on the controller: its interface and source IPv4 must match the wired link
+   and the bundle's allowed `controller_cidr`. VPN access alone does not verify
+   the connection the RAM environment needs.
 
    Then type the phrase. The target shuts down cleanly into RAM and your session
    ends; the disks are not changed.
@@ -84,7 +99,7 @@ Each step names where it runs.
 5. **Controller: connect to the RAM environment** after a minute or two:
 
    ```sh
-   ssh -o UserKnownHostsFile=~/migration-<host>.known_hosts \
+   ssh -o UserKnownHostsFile=/home/admin/migration-<host>-kexec/known_hosts \
      -o StrictHostKeyChecking=yes -p 2222 root@<target wired address>
    ```
 

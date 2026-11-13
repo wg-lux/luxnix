@@ -29,5 +29,9 @@ extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_test_password"
 
 host_luxnix:
+  # This client has no legacy LUKS files; encrypt its existing Btrfs data in place.
+  storage.operatorUnlocked.layout: '"boot-luks"'
+  storage.operatorUnlocked.volumes: "{ }"
+  storage.operatorUnlocked.bindMounts: "{ }"
   # gc-05 is enrolled and must retain fail-closed Vault authentication.
   vault.client.auth.deferUntilProvisioned: "false"

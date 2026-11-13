@@ -26,6 +26,9 @@ entrypoints:
 - name: identity-salt-enrollment
   file: subservices/lx-annotate-identity-salts.nix
   purpose: Package the shared storage verifier, preserve local generations and enroll managed center salts.
+- name: start-retry
+  file: subservices/lx-annotate-start-retry.nix
+  purpose: Re-queue enabled web and worker units left inactive after a failed start dependency; never resets failed units.
 - name: module
   file: default.nix
   purpose: Inspect module ownership and interfaces.

@@ -2068,3 +2068,26 @@ def test_runtime_exports_ffmpeg_transcode_timeout_to_wheel_services():
         """
     )
     assert timeouts == ["86400", "86400", "86400"]
+
+
+def test_lx_annotate_start_retry_timer_requeues_enabled_long_running_units() -> None:
+    evaluated = _nix_eval_expr_json(
+        """
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          systemd = flake.nixosConfigurations.gc-02.config.systemd;
+        in {
+          timer = systemd.timers.lx-annotate-start-retry.timerConfig;
+          timerWantedBy = systemd.timers.lx-annotate-start-retry.wantedBy;
+          serviceType = systemd.services.lx-annotate-start-retry.serviceConfig.Type;
+          serviceWantedBy = systemd.services.lx-annotate-start-retry.wantedBy;
+        }
+        """
+    )
+
+    assert evaluated["timer"]["Unit"] == "lx-annotate-start-retry.service"
+    assert evaluated["timer"]["OnUnitActiveSec"] == "5m"
+    assert evaluated["timerWantedBy"] == ["timers.target"]
+    assert evaluated["serviceType"] == "oneshot"
+    # Only the timer may trigger the retry; it must not join the boot transaction.
+    assert evaluated["serviceWantedBy"] == []

@@ -129,6 +129,31 @@ fails, repair and restart the wheel-runtime unit before retrying
 `lx-annotate-migrate.service`; do not run `pip` concurrently with application
 units.
 
+### Start retry after a failed boot dependency
+
+systemd does not re-queue a start job that was cancelled with `Dependency
+failed`. When Vault or encrypted storage becomes reachable only after boot,
+the preparation chain recovers but `lx-annotate.service` and the always-on
+Celery units would stay `inactive` and nginx would answer 502.
+`lx-annotate-start-retry.timer` runs three minutes after boot and then every
+five minutes and queues an ordinary `systemctl start` for each of those units
+that is `inactive`. All `Requires=` gates still apply, so a unit whose
+prerequisites are unmet stays down. Units in state `failed` are not touched,
+and the retry is skipped while a NixOS activation holds the switch lock.
+
+```bash
+systemctl list-timers lx-annotate-start-retry.timer
+sudo journalctl -u lx-annotate-start-retry.service -b --no-pager
+```
+
+Before deliberately stopping the web service or a worker for maintenance, stop
+the timer, and start it again afterwards:
+
+```bash
+sudo systemctl stop lx-annotate-start-retry.timer
+sudo systemctl start lx-annotate-start-retry.timer
+```
+
 ### Switch lifecycle
 
 The startup-preparation units `lx-annotate-runtime-env`,
