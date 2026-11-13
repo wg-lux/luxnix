@@ -206,6 +206,20 @@ screen is still black after that:
    serial port by design. Build with the default `--console tty1` for a screen.
 4. **After a kexec start, use SSH:** the screen is not needed; connect as above.
 
+### If the staged start stops in early boot
+
+The staged entry reads its runtime from the recovery drive before it shows any
+prompt. It waits up to 60 seconds for that drive and prints
+`Waiting for the recovery drive <uuid> ...`. If it cannot continue, the screen
+shows `Migration payload refused:` with the reason, for example that the drive
+did not appear or that the staged runtime file is missing, and nothing was
+changed.
+
+Images built before 2026-11-13 could not see recovery drives that attach through
+UAS (USB SSDs and NVMe enclosures, as on gc-05 and gc-09). They stopped after
+the early messages, typically after the `noresume` notice of the hibernate
+generator, without ever reaching the prompt. Build and stage a new image.
+
 To leave a black staged boot, power off and on: the migration entry is armed for
 one boot only, so the normal system starts again, as long as conversion has not
 begun. Once it has begun, every reboot returns to the migration entry by design;

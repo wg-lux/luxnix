@@ -416,7 +416,18 @@ def test_real_ram_copy_authenticates_before_publication(tmp_path, failure):
 
 @pytest.mark.parametrize(
     "failure",
-    [None, "duplicate", "target", "disk-root", "umount", "tamper", "swap", "memory"],
+    [
+        None,
+        "duplicate",
+        "target",
+        "disk-root",
+        "umount",
+        "tamper",
+        "swap",
+        "memory",
+        "absent",
+        "late",
+    ],
 )
 def test_loader_orders_identity_copy_authentication_and_detach(tmp_path, failure):
     # Mock only hardware syscalls. The loader, bounded copy and hash run unchanged.
@@ -443,7 +454,12 @@ def test_loader_orders_identity_copy_authentication_and_detach(tmp_path, failure
                 *) command awk "$@" ;;
             esac
         }
+        sleep() { echo wait >> "$WORK/events"; }
         blkid() {
+            # A USB drive can appear after the device queue first settled.
+            if [ "$FAILURE" = absent ]; then return 2; fi
+            if [ "$FAILURE" = late ] && ! grep -qx wait "$WORK/events" 2>/dev/null
+            then return 2; fi
             echo /dev/recovery
             if [ "$FAILURE" = duplicate ]; then echo /dev/duplicate; fi
             return 0
@@ -468,17 +484,25 @@ def test_loader_orders_identity_copy_authentication_and_detach(tmp_path, failure
             "WORK": str(tmp_path),
             "UUID": RECOVERY_UUID,
             "FAILURE": failure or "",
+            "RECOVERY_WAIT_SECONDS": "3",
             "HASH": expected,
             "SIZE": str(size),
         },
     )
-    assert (result.returncode == 0) == (failure is None), result.stderr
+    assert (result.returncode == 0) == (failure in {None, "late"}), result.stderr
+    # Every refusal says why on the screen, except a failed detach after the copy.
+    refused = "Migration payload refused: " in result.stderr
+    assert refused == (failure not in {None, "late", "umount"}), result.stderr
+    if failure == "absent":
+        assert "appeared within 3 seconds" in result.stderr
     events = (
         (tmp_path / "events").read_text().splitlines()
         if (tmp_path / "events").exists()
         else []
     )
-    if failure is None:
+    if failure == "late":
+        assert events == ["wait", "mount", "umount", "start-runtime"]
+    elif failure is None:
         assert events == ["mount", "umount", "start-runtime"]
         assert boot.digest(tmp_path / "nix-store.squashfs") == expected
     else:

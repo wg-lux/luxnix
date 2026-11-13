@@ -321,6 +321,9 @@ let
               "ahci"
               "sd_mod"
               "usb_storage"
+              # USB SSDs and NVMe enclosures attach through UAS; without it the
+              # staged loader never sees a recovery drive of that kind.
+              "uas"
               "xhci_pci"
               "usbhid"
             ];

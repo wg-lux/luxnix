@@ -25,25 +25,29 @@ def run(*args):
     return subprocess.run(list(map(str, args)), check=True, capture_output=True)
 
 
+# Real recovery media are USB SSDs and NVMe enclosures, which attach through UAS.
+USB_RECOVERY = [
+    "-device", "qemu-xhci,id=xhci",
+    "-device", "usb-uas,id=uas,bus=xhci.0",
+    "-device", "scsi-hd,bus=uas.0,scsi-id=0,lun=0,drive=recovery,"
+    "serial=test-recovery-disk",
+]  # fmt: skip
+
+
 def recovery_disk(bundle, spec, directory, *, tamper=False):
+    """An ext4 image with the signed filesystem UUID, built without root."""
     disk = directory / "recovery.img"
-    with disk.open("wb") as stream:
-        stream.truncate(768 * 1024**2)
-    run("mkfs.vfat", "-F", "32", "-i", "11112222", disk)
-    run("mmd", "-i", disk, "::/luxnix-migration")
-    payload = bundle / "migration.squashfs"
+    content = directory / "recovery"
+    (content / "luxnix-migration").mkdir(parents=True)
+    payload = content / "luxnix-migration" / (spec["payload"]["sha256"] + ".squashfs")
+    shutil.copyfile(bundle / "migration.squashfs", payload)
     if tamper:
-        payload = directory / "corrupt.squashfs"
-        shutil.copyfile(bundle / "migration.squashfs", payload)
         with payload.open("r+b") as stream:
             stream.write(b"bad!")
-    run(
-        "mcopy",
-        "-i",
-        disk,
-        payload,
-        "::/luxnix-migration/" + spec["payload"]["sha256"] + ".squashfs",
-    )
+    with disk.open("wb") as stream:
+        stream.truncate(768 * 1024**2)
+    run("mkfs.ext4", "-q", "-U", spec["recovery"]["uuid"], "-d", content, disk)
+    shutil.rmtree(content)
     return disk
 
 
@@ -101,12 +105,8 @@ def test_split_loader_boots_only_authenticated_ram_payload(tmp_path, case):
         pytest.skip("physical-console fixture is exercised through UEFI below")
     if case == "decline" and not local_console:
         pytest.skip("console refusal requires local-console fixture")
-    assert spec["recovery"] == {
-        "uuid": "1111-2222",
-        "fstype": "vfat",
-        "luks_uuid": None,
-    }
-    for tool in ("mkfs.vfat", "mcopy", "mmd", "objcopy"):
+    assert spec["recovery"]["fstype"] == "ext4" and not spec["recovery"]["luks_uuid"]
+    for tool in ("mkfs.ext4", "objcopy"):
         assert shutil.which(tool), f"Required test tool missing: {tool}"
 
     for section in ("linux", "initrd", "cmdline"):
@@ -151,8 +151,7 @@ def test_split_loader_boots_only_authenticated_ram_payload(tmp_path, case):
         cmdline,
         "-drive",
         f"file={disk},format=raw,if=none,id=recovery",
-        "-device",
-        "ide-hd,drive=recovery,serial=test-recovery-disk",
+        *USB_RECOVERY,
     ]
     with (tmp_path / "qemu.log").open("w") as log, serial.open("w") as output_log:
         process = subprocess.Popen(
@@ -233,7 +232,7 @@ def test_uefi_physical_console_boots_in_five_gib(tmp_path):
     if not all(firmware):
         pytest.skip("requires disposable OVMF firmware")
     assert spec["host"] == "test-host" and spec["authorized_keys"] == []
-    for tool in ("mkfs.vfat", "mcopy", "mmd", "sfdisk", "objcopy"):
+    for tool in ("mkfs.vfat", "mkfs.ext4", "mcopy", "mmd", "sfdisk", "objcopy"):
         assert shutil.which(tool), f"Required test tool missing: {tool}"
 
     cmdline = tmp_path / "cmdline"
@@ -305,8 +304,7 @@ def test_uefi_physical_console_boots_in_five_gib(tmp_path):
         "nvme,drive=esp,serial=test-esp,bootindex=1",
         "-drive",
         f"file={disk},format=raw,if=none,id=recovery",
-        "-device",
-        "nvme,drive=recovery,serial=test-recovery-disk",
+        *USB_RECOVERY,
     ]
 
     def request(connection, text):

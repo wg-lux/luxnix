@@ -112,6 +112,7 @@ in
             . ${./migration-load.sh}
             if ! . ${parameters}; then
               echo 'Migration payload admission failed. Root conversion is unavailable.' > /dev/console
+              echo 'No disk was changed. Hold the power button to switch off, then start again.' > /dev/console
               exit 1
             fi
           '';

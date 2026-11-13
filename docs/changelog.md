@@ -15,6 +15,10 @@
   stopped before any partition was encrypted is replaced automatically; it no
   longer stops with "The checkout or flake.lock changed after this plan
   started".
+- The staged migration entry now loads the UAS driver in early boot, waits up
+  to 60 seconds for the recovery drive and shows why it refuses a runtime.
+  Earlier images never found a recovery drive on a USB SSD or NVMe enclosure
+  and stopped before the approval prompt; build and stage a new image.
 - A `migration-boot kexec` start checks its store image in memory and restarts
   into the installed system after 15 seconds when it is damaged or the RAM
   kernel crashes, instead of hanging.

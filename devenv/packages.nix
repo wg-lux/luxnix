@@ -24,6 +24,7 @@ with pkgs;
   # Encrypted host backup on the recovery drive (lx_administration/storage/host_backup.py).
   rsync
   e2fsprogs
+  util-linux
   # Controller-held fleet Secure Boot keys (lx_administration/secure_boot.py).
   age
   sbctl
