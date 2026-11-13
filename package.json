@@ -1,0 +1,24 @@
+{
+  "name": "luxnix",
+  "version": "1.0.0",
+  "description": "A comprehensive NixOS configuration framework designed for research and development environments, emphasizing security, reproducibility, and automated deployment. Built using Snowfall Lib and Nixicle, this architecture easily manages multiple systems and user environments with a focus on enabling fast GPU computing and secure networking.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "lib": "lib",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "tst"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wg-lux/luxnix.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/wg-lux/luxnix/issues"
+  },
+  "homepage": "https://github.com/wg-lux/luxnix#readme"
+}

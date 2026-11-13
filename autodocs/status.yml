@@ -1,0 +1,27 @@
+# Lifecycle record for the preserved historical Mermaid report generator.
+schema_version: 1
+status: inactive-preserved
+canonical: false
+entrypoint: autodocs/mermaid_report_of_host_configs.py
+
+history:
+  introduced: 2025-01-27
+  last_maintenance: 2025-08-27
+  original_input: autoconf/host_configs_25-01-17.yml
+
+blocked_by:
+  - The hard-coded dated input no longer exists.
+  - Paths depend on the invoking working directory rather than autoconf/config.yml.
+  - Generated host, role, service, setting, and address diagrams have no redaction contract.
+  - Generated files have no restrictive permission or Git lifecycle contract.
+  - The generator is outside active tests and does not meet the current Ruff style baseline.
+
+current_operator_report:
+  workflow: generate-inventory-report
+  command: devenv tasks run autoconf:generate-report
+  guide: docs/autoconf.md
+  feature_equivalence: not-established
+
+retention: >-
+  Preserve the Mermaid capability until its diagram use case is migrated to
+  current Autoconf inputs or explicitly retired after operator review.

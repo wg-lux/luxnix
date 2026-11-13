@@ -1,0 +1,79 @@
+---
+- name: Inspect storage without changing the selected computer
+  hosts: all
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Require an explicit target and a complete admission request
+      ansible.builtin.assert:
+        that:
+          - ansible_limit | default('') | length > 0
+          - storage_readiness_mode | default('observe') in ['observe', 'admit']
+          - >-
+            storage_readiness_mode | default('observe') != 'admit' or
+            (ansible_play_hosts_all | length == 1 and
+             storage_expected_host | default('') == inventory_hostname and
+             storage_expected_layout | default('') in ['legacy-containers', 'unencrypted-root', 'boot-luks'] and
+             storage_expected_serials | default([]) | length > 0)
+        fail_msg: >-
+          Select one computer, its existing layout and the reviewed serial numbers of
+          every attached disk for admission. Observation mode does not authorize migration.
+      no_log: true
+
+    - name: Collect observations and evaluate the requested storage admission
+      ansible.builtin.command:
+        argv: >-
+          {{ ['/run/current-system/sw/bin/python3', '-', '--full-report', '--expected-host',
+              storage_expected_host | default(inventory_hostname), '--mode',
+              storage_readiness_mode | default('observe'), '--expected-serials',
+              storage_expected_serials | default([]) | to_json]
+             + (['--expected-layout', storage_expected_layout]
+                if storage_expected_layout is defined else []) }}
+        stdin: "{{ lookup('file', '../../lx_administration/storage/readiness.py') }}"
+      become: "{{ storage_readiness_mode | default('observe') == 'admit' }}"
+      become_user: root
+      register: storage_readiness
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Extract console-safe admission reasons privately
+      ansible.builtin.set_fact:
+        storage_readiness_reasons: >-
+          {{ (storage_readiness.stdout | from_json).get('admission',
+              {'reasons': [{'code': 'observation_only',
+                           'message': 'Observations collected; admission was not requested.'}]}).reasons }}
+      when: storage_readiness.stdout | default('') | length > 0
+      no_log: true
+
+    - name: Report admission reasons without storage observations
+      ansible.builtin.debug:
+        msg: "{{ storage_readiness_reasons | default([{'code': 'collection_failed', 'message': 'Storage observations could not be collected.'}]) }}"
+
+    - name: Save an explicitly requested private controller observation
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "{{ playbook_dir }}/../../lx_administration/storage/readiness.py"
+          - --save-report
+          - --expected-host
+          - "{{ inventory_hostname }}"
+        stdin: "{{ storage_readiness.stdout }}"
+      delegate_to: localhost
+      become: false
+      when:
+        - storage_readiness_save_report | default(false) | bool
+        - storage_readiness.stdout | default('') | length > 0
+      changed_when: true
+      no_log: true
+
+    - name: Stop when identity or required admission checks failed
+      ansible.builtin.assert:
+        that:
+          - storage_readiness.rc == 0
+          - (storage_readiness.stdout | from_json).host == inventory_hostname
+        fail_msg: >-
+          Storage admission failed. Review the reasons above with the operator;
+          no storage, keys, services or boot settings were changed.
+      no_log: true

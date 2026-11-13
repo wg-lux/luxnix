@@ -3,10 +3,12 @@
   lib,
   ...
 }:
-with lib; 
-with lib.luxnix; let
+with lib;
+with lib.luxnix;
+let
   cfg = config.services.luxnix.n8n;
-in {
+in
+{
   options.services.luxnix.n8n = {
     enable = mkBoolOpt false "Enable n8n";
   };
@@ -29,7 +31,7 @@ in {
 
             routers = {
               n8n = {
-                entryPoints = ["websecure"];
+                entryPoints = [ "websecure" ];
                 rule = "Host(`n8n.homelab.haseebmajid.dev`)";
                 service = "n8n";
                 tls.certResolver = "letsencrypt";

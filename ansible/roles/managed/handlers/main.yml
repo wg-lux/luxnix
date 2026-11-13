@@ -1,15 +1,35 @@
 - name: Run nho
   ansible.builtin.expect:
-    command: "nh os switch"
+    command: "sudo nixos-rebuild switch --flake {{ (luxnix_dest ~ '#' ~ inventory_hostname) | quote }}"
     timeout: 900 # 15 Minutes
     responses:
       "(?i)\\[sudo\\]\\s*(?:passwort|password)\\s*(?:für|for)\\s*admin:": "{{ ansible_sudo_pass }}"
   become: true
   become_user: "{{ ansible_become_user }}"
   vars:
-    ansible_sudo_pass: "{{ user_password.content | b64decode }}"
+    ansible_sudo_pass: "{{ managed_user_password.content | b64decode }}"
   async: 900 # 15 minutes
   poll: 5
+
+- name: Verify the active system is persisted
+  listen: Run nho
+  ansible.builtin.shell: |
+    set -eu
+    active=$(readlink -e /run/current-system)
+    persisted=$(readlink -e /nix/var/nix/profiles/system)
+    test -n "$active" && test "$active" = "$persisted"
+  changed_when: false
+
+- name: Close the cached SSH connection after rebuilding
+  listen: Run nho
+  ansible.builtin.meta: reset_connection
+
+- name: Verify fresh SSH access after rebuilding
+  listen: Run nho
+  ansible.builtin.wait_for_connection:
+    connect_timeout: 10
+    sleep: 5
+    timeout: 120
 
 - name: Run nhh
   ansible.builtin.expect:
@@ -20,6 +40,6 @@
   become: true
   become_user: "{{ ansible_become_user }}"
   vars:
-    ansible_sudo_pass: "{{ user_password.content | b64decode }}"
+    ansible_sudo_pass: "{{ managed_user_password.content | b64decode }}"
   async: 900 # 15 minutes
   poll: 5

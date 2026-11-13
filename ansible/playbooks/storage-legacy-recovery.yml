@@ -1,0 +1,225 @@
+---
+- name: Restore gc-10 operation using the explicit encrypted-container maintenance profile
+  hosts: all
+  gather_facts: false
+  become: false
+  vars:
+    ansible_remote_tmp: /run/user/1000/luxnix-ansible-recovery
+    release_directory: /home/admin/luxnix-releases/gc10-legacy-20261030
+    release_artifacts: /home/admin/luxnix-releases/artifacts-20261030
+  tasks:
+    - name: Require the reviewed target and immutable base revision
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'gc-10'
+          - release_revision is match('^[0-9a-f]{40}$')
+          - expected_closure is match('^/nix/store/[a-z0-9]{32}-nixos-system-gc-10-')
+
+    - name: Verify the responding hostname
+      ansible.builtin.command: hostname
+      register: release_hostname
+      changed_when: false
+
+    - name: Refuse a different machine
+      ansible.builtin.assert:
+        that: release_hostname.stdout == inventory_hostname
+
+    - name: Preserve the existing checkout and create durable release artifacts
+      ansible.builtin.file:
+        path: '{{ release_artifacts }}'
+        state: directory
+        mode: '0700'
+
+    - name: Transfer public reviewed release inputs
+      ansible.builtin.copy:
+        src: '/home/admin/.local/state/luxnix/migrations/20261030/{{ item }}'
+        dest: '{{ release_artifacts }}/{{ item }}'
+        mode: '0600'
+      loop: [gc10-release.bundle, gc10-legacy.patch]
+
+    - name: Import the reviewed Git objects without changing the existing checkout
+      ansible.builtin.command:
+        argv: [git, -C, /home/admin/luxnix, fetch, '{{ release_artifacts }}/gc10-release.bundle', '{{ release_revision }}']
+      changed_when: true
+
+    - name: Create the retained maintenance worktree
+      ansible.builtin.command:
+        argv: [git, -C, /home/admin/luxnix, worktree, add, --detach, '{{ release_directory }}', '{{ release_revision }}']
+        creates: '{{ release_directory }}/.git'
+
+    - name: Check whether the reviewed patch is already present
+      ansible.builtin.command:
+        argv: [git, -C, '{{ release_directory }}', apply, --reverse, --check, '{{ release_artifacts }}/gc10-legacy.patch']
+      register: patch_present
+      failed_when: patch_present.rc not in [0, 1]
+      changed_when: false
+
+    - name: Check the patch against the untouched base
+      ansible.builtin.command:
+        argv: [git, -C, '{{ release_directory }}', apply, --check, '{{ release_artifacts }}/gc10-legacy.patch']
+      changed_when: false
+      when: patch_present.rc != 0
+
+    - name: Apply only the reviewed maintenance-profile changes
+      ansible.builtin.command:
+        argv: [git, -C, '{{ release_directory }}', apply, '{{ release_artifacts }}/gc10-legacy.patch']
+      changed_when: true
+      when: patch_present.rc != 0
+
+    - name: Build the exact retained release before changing runtime state
+      ansible.builtin.command:
+        argv: [nix, build, '{{ release_directory }}#nixosConfigurations.gc-10.config.system.build.toplevel', --no-link, --print-out-paths, --accept-flake-config]
+      register: release_build
+      changed_when: false
+
+    - name: Require the independently built controller closure
+      ansible.builtin.assert:
+        that: release_build.stdout | trim == expected_closure
+
+    - name: Verify protected controller key staging and remote runtime staging
+      ansible.builtin.include_tasks:
+        file: tasks/verify_secret_storage.yml
+        apply:
+          become: true
+          become_user: root
+      vars:
+        secret_controller_paths: ['{{ recovery_vars_file }}']
+        secret_remote_paths: [/run]
+        ansible_remote_tmp: /run/user/1000/luxnix-ansible-recovery
+
+    - name: Verify the target machine identity
+      ansible.builtin.command: cat /etc/machine-id
+      register: release_machine
+      changed_when: false
+
+    - name: Require existing identity-bound recovery records
+      ansible.builtin.assert:
+        that:
+          - item.host == inventory_hostname
+          - item.machine_id == release_machine.stdout | trim
+          - item.volume in ['luxnix-secrets', 'luxnix-app-storage']
+          - item.container in ['/var/lib/luxnix-secrets.luks', '/data/raid01/luxnix-app-storage.luks']
+      loop: '{{ legacy_recovery_records }}'
+      no_log: true
+
+    - name: Verify existing LUKS UUIDs before using recovery credentials
+      ansible.builtin.command:
+        argv: [cryptsetup, luksUUID, '{{ item.container }}']
+      become: true
+      become_user: root
+      loop: '{{ legacy_recovery_records }}'
+      register: release_uuids
+      changed_when: false
+      no_log: true
+
+    - name: Refuse wrong devices or replacement storage
+      ansible.builtin.assert:
+        that: item.stdout | trim == item.item.luks_uuid
+      loop: '{{ release_uuids.results }}'
+      no_log: true
+
+    - name: Authenticate existing recovery credentials without altering keyslots
+      ansible.builtin.command:
+        argv: [cryptsetup, open, --test-passphrase, --key-file=-, '{{ item.container }}']
+        stdin: '{{ item.recovery_passphrase }}'
+        stdin_add_newline: false
+      become: true
+      become_user: root
+      loop: '{{ legacy_recovery_records }}'
+      changed_when: false
+      no_log: true
+
+    - name: Open only existing authenticated containers
+      ansible.builtin.command:
+        argv: [cryptsetup, open, --type, luks, --key-file=-, '{{ item.container }}', '{{ item.volume }}']
+        stdin: '{{ item.recovery_passphrase }}'
+        stdin_add_newline: false
+        creates: '/dev/mapper/{{ item.volume }}'
+      become: true
+      become_user: root
+      loop: '{{ legacy_recovery_records }}'
+      no_log: true
+
+    - name: Require each mapping to reference its original container
+      ansible.builtin.command:
+        argv: [cryptsetup, status, '{{ item.volume }}']
+      become: true
+      become_user: root
+      loop: '{{ legacy_recovery_records }}'
+      register: opened_mappings
+      changed_when: false
+      no_log: true
+
+    - name: Refuse a different backing container
+      ansible.builtin.assert:
+        that: "('loop: ' ~ item.item.container) in (item.stdout | regex_replace(' +', ' '))"
+      loop: '{{ opened_mappings.results }}'
+      no_log: true
+
+    # Tag selection filters out untagged tasks, so `--tags activate` alone would
+    # skip every identity, closure and mapping gate above. Registered results
+    # exist only if those gates ran and passed earlier in this same run.
+    - name: Refuse activation unless the target, closure and mapping gates passed in this run
+      tags: [activate]
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'gc-10'
+          - release_build is defined
+          - opened_mappings is defined
+        fail_msg: Run the whole playbook without tag selection; --tags activate alone skips the preparation gates.
+
+    # `start` is idempotent but prints only the identifier for a new and a resumed
+    # activation alike, so report the state-changing path conservatively.
+    - name: Start detached activation with an independently armed compatibility-bound rollback watchdog
+      tags: [activate]
+      ansible.builtin.command:
+        argv: >-
+          {{ [expected_closure ~ '/sw/bin/luxnix-safe-activate', 'start', '--system', expected_closure, '--action', 'switch']
+             + (['--receipt', release_rollback_receipt] if release_rollback_receipt is defined else []) }}
+      become: true
+      become_user: root
+      register: activation_start
+      changed_when: true
+
+    - name: Wait for the detached activation to finish while the watchdog remains armed
+      tags: [activate]
+      ansible.builtin.command:
+        argv: ['{{ expected_closure }}/sw/bin/luxnix-safe-activate', status, --id, '{{ activation_start.stdout | trim }}']
+      register: activation_status
+      until: (activation_status.stdout | from_json).status in ['awaiting-ack', 'accepted', 'rolled-back']
+      retries: 390
+      delay: 5
+      changed_when: false
+
+    - name: Require successful activation before accepting it
+      tags: [activate]
+      ansible.builtin.assert:
+        that: (activation_status.stdout | from_json).status in ['awaiting-ack', 'accepted']
+
+    - name: Require active and persistent generations to match the reviewed closure
+      tags: [activate]
+      ansible.builtin.shell: |
+        set -eu
+        test "$(readlink -e /run/current-system)" = {{ expected_closure | quote }}
+        test "$(readlink -e /nix/var/nix/profiles/system)" = {{ expected_closure | quote }}
+      changed_when: false
+
+    - name: Close cached SSH transport
+      tags: [activate]
+      ansible.builtin.meta: reset_connection
+
+    - name: Verify fresh SSH access
+      tags: [activate]
+      ansible.builtin.wait_for_connection:
+        connect_timeout: 10
+        sleep: 5
+        timeout: 120
+
+    - name: Acknowledge the exact activation only after a fresh SSH login
+      tags: [activate]
+      ansible.builtin.command:
+        argv: ['{{ expected_closure }}/sw/bin/luxnix-safe-activate', ack, --id, '{{ activation_start.stdout | trim }}']
+      become: true
+      become_user: root
+      # Acknowledging an already accepted activation is a no-op in the worker.
+      changed_when: (activation_status.stdout | from_json).status == 'awaiting-ack'

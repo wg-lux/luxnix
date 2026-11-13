@@ -1,0 +1,12 @@
+# Compatibility pointer for old references; requirements live in one current contract.
+schema_version: "2.0"
+catalog_id: fleet_volume_encryption
+status: historical_reference
+current_contract: boot-storage.yml
+runbook: docs/boot-storage-quickstart.md
+readiness_tracker: feature-tracking/luxnix_secret_lifecycle_readiness.yaml
+history:
+  revision: 39eeabdbc52af4129eafb76bfa9e8d84757ade92
+  catalog: https://github.com/wg-lux/luxnix/blob/39eeabdbc52af4129eafb76bfa9e8d84757ade92/boot-encryption-acceptance.yml
+  scope: Superseded OpenBao/TPM container criteria and earlier boot-LUKS decisions.
+  rule: Historical assessments do not add prerequisites to fresh installation or establish physical host acceptance.

@@ -1,0 +1,7 @@
+# Admission limits for the signed RAM environment, not permission to encrypt.
+schema_version: 2
+ssh_port: 2222
+minimum_memory_mib: 4096
+maximum_image_mib: 384
+esp_reserve_mib: 64
+maximum_payload_mib: 1024

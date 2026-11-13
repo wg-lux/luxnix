@@ -1,19 +1,19 @@
 {
   config,
-  inputs,
-  pkgs,
   lib,
   ...
 }:
 
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.luxnix.maintenance.autoUpdates;
 
-in {
+in
+{
   options.luxnix.maintenance.autoUpdates = with types; {
-    enable = mkBoolOpt false "Enable or disable the scheduled rebooting of the system";
-    
+    enable = mkBoolOpt false "Stage a reviewed revision for a separately authorized reboot";
+
     dates = mkOption {
       type = with types; str;
       default = "08:49";
@@ -21,36 +21,45 @@ in {
     };
 
     operation = mkOption {
-      type = with types; str;
-      default = "boot"; # alternatively: update
-      description = "The operation to perform";
+      type = str;
+      default = "boot";
+      description = "Stage the reviewed system without live activation";
     };
 
     flake = mkOption {
       type = with types; str;
-      default = "github:wg-lux/luxnix"; #TODO Create Production Branch and use it here
-      description = "The flake to upgrade";
+      default = "";
+      description = "Reviewed github:wg-lux/luxnix/<full commit SHA> flake";
     };
 
   };
-
-  #TODO Documentation
-  # sudo systemctl status nixos-upgrade.timer
-  # sudo systemctl status nixos-upgrade.service
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = builtins.match "github:wg-lux/luxnix/[0-9a-f]{40}" cfg.flake != null;
+        message = "Scheduled upgrades require an explicitly reviewed full LuxNix commit SHA.";
+      }
+      {
+        assertion = cfg.operation == "boot";
+        message = "Scheduled upgrades may only stage boot; activation requires operator review.";
+      }
+    ];
     system.autoUpgrade = {
-      enable = cfg.enable;
-      flake = cfg.flake;
+      inherit (cfg)
+        enable
+        flake
+        dates
+        operation
+        ;
       flags = [
         "-L"
+        "--no-update-lock-file"
       ];
-      dates = cfg.dates;
-      operation = cfg.operation;
       fixedRandomDelay = true;
       randomizedDelaySec = "30min";
-      allowReboot = true;
+      allowReboot = false;
     };
   };
-  
+
 }

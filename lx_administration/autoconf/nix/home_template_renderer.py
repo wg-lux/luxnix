@@ -1,27 +1,22 @@
-from jinja2 import Environment, FileSystemLoader
-from typing import Dict, Any
+"""Render Home Manager templates with the shared Nix literal contract."""
 
+from pathlib import Path
 
-def to_nix(value):
-    if isinstance(value, str):
-        return '"' + value.strip('"') + '"'
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if value is None:
-        return "null"
-    return str(value)
+from .template_renderer import nix_literal, render_nix_template
+
+to_nix = nix_literal
 
 
 def render_home_nix_template(
-    template_dir: str, template_name: str, config_data: Dict[str, Any]
+    template_dir: str | Path,
+    template_name: str,
+    config_data: dict[str, object],
 ) -> str:
-    #  Enable whitespace control
-    env = Environment(
-        loader=FileSystemLoader(template_dir),
-        trim_blocks=True,    # Removes newlines after {% blocks %}
-        lstrip_blocks=True   # Removes leading spaces before {% blocks %}
+    return render_nix_template(
+        template_dir,
+        template_name,
+        config_data,
+        filter_name="to_nix",
+        trim_blocks=True,
+        lstrip_blocks=True,
     )
-    env.filters["to_nix"] = to_nix  # Inject the custom filter
-    template = env.get_template(template_name)
-    return template.render(**config_data)
-

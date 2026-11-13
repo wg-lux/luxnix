@@ -1,22 +1,30 @@
-{config, lib, pkgs, ...}: 
+{ config, lib, ... }:
 
-with lib; 
-with lib.luxnix; let
+with lib;
+with lib.luxnix;
+let
   cfg = config.services.luxnix.podman;
-  adminUser = config.user.admin.name;
-  cudaSupport = config.luxnix.nvidia-default.enable;
-in {
+  # Use comprehensive NVIDIA detection logic
+  cudaSupport =
+    (config.luxnix.nvidia-default.enable or false)
+    || (config.luxnix.nvidia-prime.enable or false)
+    || (config.luxnix.generic-settings.gpu.nvidia.enable or false);
+in
+{
   options.services.luxnix.podman = {
     enable = mkBoolOpt false "Enable Podman";
     # Enable podman-compose
     podmanCompose = mkBoolOpt false "Enable podman-compose";
     # Enable podman-docker
     dockerDropIn = mkBoolOpt true "Enable podman as docker drop-in replacement";
+    dockerSocketEnable = mkBoolOpt cfg.dockerDropIn "Enable the Docker-compatible socket";
+    dnsEnabled = mkBoolOpt true "Enable DNS for the default container network";
+    defaultNetworkSettings = mkOpt types.attrs { } "Additional default container network settings";
     nvidia = mkBoolOpt cudaSupport "Enable NVIDIA support";
     networkSocket = mkBoolOpt false "Enable network socket";
-    extraPackages = mkOpt (types.listOf types.package) [] "Additional packages to install";
+    extraPackages = mkOpt (types.listOf types.package) [ ] "Additional packages to install";
     autoPrune = mkBoolOpt true "Enable auto-prune";
-    autoPruneFlags = mkOpt (types.listOf types.str) ["--all"] "Flags for auto-prune";
+    autoPruneFlags = mkOpt (types.listOf types.str) [ "--all" ] "Flags for auto-prune";
   };
 
   config = mkIf cfg.enable {
@@ -26,22 +34,25 @@ in {
     };
 
     hardware.nvidia-container-toolkit.enable = cfg.nvidia;
-    
+
     # Enable common container config files in /etc/containers
     virtualisation.containers.enable = true;
     virtualisation = {
       podman = {
-        enable = cfg.enable;
+        inherit (cfg) enable;
         # Create a `docker` alias for podman, to use it as a drop-in replacement
-        extraPackages = [] ++ cfg.extraPackages;
-        dockerSocket.enable = cfg.dockerDropIn;
+        inherit (cfg) extraPackages;
+        dockerSocket.enable = cfg.dockerSocketEnable;
         dockerCompat = cfg.dockerDropIn;
         autoPrune = {
           enable = cfg.autoPrune;
           flags = cfg.autoPruneFlags;
         };
         # Required for containers under podman-compose to be able to talk to each other.
-        # defaultNetwork.settings.dns_enabled = true;
+        defaultNetwork.settings = {
+          dns_enabled = cfg.dnsEnabled;
+        }
+        // cfg.defaultNetworkSettings;
         networkSocket = {
           enable = cfg.networkSocket;
           # tls.cert = "PATH_TO_CERT";

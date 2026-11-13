@@ -1,4 +1,4 @@
-{lib, ...}: {
+{ lib, ... }: {
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
@@ -24,10 +24,10 @@
   };
 
   users.users = {
-    nixos.extraGroups = ["networkmanager"];
+    nixos.extraGroups = [ "networkmanager" ];
 
     # TODO: reuse existing openss config
-    #CHANGEME 
+    #CHANGEME
     nixos.openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M"
       # "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKuM4bCeJq0XQ1vd/iNK650Bu3wPVKQTSB0k2gsMKhdE hello@haseebmajid.dev"

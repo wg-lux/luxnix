@@ -1,0 +1,28 @@
+version: 1
+tier: domain
+path: modules/home
+parent: ../structure.yml
+summary: Reusable user environment options and CLI or desktop configuration.
+responsibilities:
+- Define user-level module behavior
+- Share shell configuration through the common shell module
+boundaries:
+- Do not own system service lifecycle here
+- Do not duplicate host identity or inventory settings
+entrypoints:
+- name: shared-shell
+  file: cli/shells/shared/default.nix
+  purpose: Inspect shared shell ownership and interfaces.
+dependencies:
+  internal:
+  - homes
+  external:
+  - Home Manager
+  - Nix
+submodules: []
+contracts:
+- name: architecture
+  doc: ../../docs/architecture.md
+tests:
+  directory: ../../tests
+  command: python -m pytest -q tests/test_shell_alias_contract.py

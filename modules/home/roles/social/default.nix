@@ -1,12 +1,13 @@
 {
-  pkgs,
   config,
   lib,
   ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.roles.social;
-in {
+in
+{
   options.roles.social = {
     enable = mkEnableOption "Enable social suite";
   };

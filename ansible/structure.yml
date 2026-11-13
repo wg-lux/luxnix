@@ -1,0 +1,71 @@
+version: 1
+tier: domain
+path: ansible
+parent: ../structure.yml
+summary: Canonical host inventory, variable precedence, and guarded deployment playbooks.
+responsibilities:
+  - Own inventory membership and shared or host-specific variables
+  - Deliver configuration through reviewed playbooks
+  - Enroll hub sites with pinned SSH, per-host hidden sudo prompts and protected Vault token handling
+boundaries:
+  - Local CMDB facts are sensitive and must not be committed
+  - Remote changes require explicit target authorization and connectivity checks
+entrypoints:
+  - name: migration-boot
+    file: playbooks/migration-boot.yml
+    purpose: Stage one reviewed RAM image on one explicitly selected host; preserve its normal boot default.
+  - name: home-git-identity
+    file: inventory/group_vars/group_home_git_maddonix.yml
+    purpose: Share the maddonix Git identity only with homes selected in home-hosts.yml.
+  - name: storage-local-backup
+    file: playbooks/storage-local-backup.yml
+    purpose: Create encrypted snapshot archives on the approved gc-09 local external filesystem without sending a private key.
+  - name: storage-legacy-recovery
+    file: playbooks/storage-legacy-recovery.yml
+    purpose: Retain a reviewed gc-10 release, authenticate existing containers and activate only the explicit maintenance profile without rebooting.
+  - name: storage-backup-identity-escrow
+    file: playbooks/storage-backup-identity-escrow.yml
+    purpose: Preserve the existing controller backup identity on independently protected gs-02 storage without replacing keys.
+  - name: storage-migration-snapshot
+    file: playbooks/storage-migration-snapshot.yml
+    purpose: Explicitly preserve gc-09 or gc-10 migration sources with short application downtime.
+  - name: storage-readiness
+    file: playbooks/storage-readiness.yml
+    purpose: Summarize storage admission and optionally retain full observations in private controller artifacts without exposing host facts in output.
+  - name: operator-unlocked-secrets
+    file: inventory/group_vars/operator_unlocked_secrets.yml
+    purpose: Fleet guarded consumers and temporary legacy-container recovery metadata; final storage uses boot LUKS.
+  - name: shared-packages
+    file: inventory/group_vars/all/70-packages.yml
+    purpose: Fleet-wide package additions consumed by the central package module.
+  - name: secret-storage-preflight
+    file: playbooks/tasks/verify_secret_storage.yml
+    purpose: Gate secret sources, destinations and Ansible plaintext staging through the shared encrypted-storage verifier.
+  - name: inventory
+    file: inventory/hosts.ini
+    purpose: Inspect inventory ownership and interfaces.
+  - name: home-inventory
+    file: inventory/home-hosts.yml
+    purpose: Inspect home inventory ownership and interfaces.
+  - name: deployment
+    file: site.yml
+    purpose: Inspect deployment ownership and interfaces.
+dependencies:
+  internal:
+    - autoconf
+    - conf
+    - scripts
+    - lx_administration
+  external:
+    - Ansible
+    - SSH
+    - Vault
+submodules: []
+contracts:
+  - name: README
+    doc: inventory/group_vars/README.md
+  - name: readme
+    doc: playbooks/readme.md
+tests:
+  directory: ../tests
+  command: python -m pytest -q tests/test_inventory_contract.py tests/test_ansible_inventory.py

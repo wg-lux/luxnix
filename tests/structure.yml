@@ -1,0 +1,317 @@
+---
+version: 1
+tier: domain
+path: tests
+parent: ../structure.yml
+summary: Root-scoped Python contracts, service suites and explicit Nix evaluation or VM lanes.
+responsibilities:
+  - Test configuration ownership, generators and administration interfaces
+  - Keep independent MCP tests outside root discovery
+boundaries:
+  - Source checks do not prove deployment readiness
+  - Nix evaluation and VM tests are separate from the fast Python lane
+entrypoints:
+  - name: ram-command
+    file: test_ram_boot.py
+    purpose: Verify hash-free RAM staging, source and host admission, artifact integrity, quoted remote arguments and explicit apply boundaries.
+  - name: fresh-install
+    file: test_fresh_install.py
+    purpose: Refuse unsafe erasure, resume verified fresh installation without formatting or credential replacement and inspect root-only encrypted systems.
+  - name: fresh-install-vm
+    file: nixtest/fresh_install_vm_test.nix
+    purpose: Exercise single and multidisk packaged installers, interruption recovery without repeated Disko, secondary key enrollment, encrypted boot and administrator PAM authentication.
+  - name: migration-loader-vm
+    file: test_migration_loader_vm.py
+    purpose: Opt-in disposable QEMU boot of the signed-loader initrd and rejection of corrupted external payloads; no production firmware or root disks.
+  - name: migration-boot
+    file: test_migration_boot.py
+    purpose: Verify artifact tamper refusal, host admission and preservation of normal boot defaults.
+  - name: credential-backup
+    file: test_credential_backup.py
+    purpose: Verify authenticated archive round trips, tamper rejection, credential drift and non-overwriting backup behavior.
+  - name: in-place-encryption-safety
+    file: test_in_place.py
+    purpose: Verify child-held operation locks, truthful partial-failure diagnostics, compared data consolidation and acceptance-gated container retirement.
+  - name: boot-guide
+    file: test_boot_guide.py
+    purpose: Preserve existing custody and distinguish accepted backup risk from operator-reported restore evidence without answering for the operator.
+  - name: luxnix-command
+    file: test_luxnix_cli.py
+    purpose: Verify fresh installation is the nonmutating default, preservation requires an explicit command, and status never creates or refreshes plans.
+  - name: in-place-encryption-vm
+    file: nixtest/in_place_encryption_vm_test.nix
+    purpose: Encrypt independent plaintext root and data filesystems with containers, cut power, resume, cold boot and retire containers on disposable disks.
+  - name: secret-preflight-safety
+    file: test_secret_preflight.py
+    purpose: Verify required secret selection, custody independence, admin password proof and the receipt gate on recovery review.
+  - name: recovery-media-safety
+    file: test_recovery_media.py
+    purpose: Verify external selection, mount identity, capacity checks and non-destructive recovery setup.
+  - name: boot-setup-safety
+    file: test_boot_setup.py
+    purpose: Verify sequential root setup, disposal gates, typed approval, journal durability, non-formatting recovery and replacement of outdated unstarted plans.
+  - name: boot-recovery-vm
+    file: nixtest/boot_recovery_vm_test.nix
+    purpose: Exercise gc-02 credential validators, immutable-user PAM login, desktop chooser and delayed Vault dependency recovery in a disposable VM.
+  - name: disk-password-custody
+    file: test_password_custody.py
+    purpose: Verify private one-time disclosure, acknowledgement binding and refusal to reveal credentials without a terminal.
+  - name: boot-password-setup
+    file: test_boot_password.py
+    purpose: Verify interactive-only passphrase setup, receipt invalidation, identity binding, and recovery-slot preservation with disposable LUKS images.
+  - name: installed-node-provisioning
+    file: lx-annotate/test_installed_node_provisioning.py
+    purpose: Install the digest-bound selected wheel and verify existing-center policy, aliases, idempotence, secret rotation and SQLite transaction rollback.
+  - name: hub-backup-restore-vm
+    file: nixtest/lx_annotate_hub_backup_vm_test.nix
+    purpose: Restore actual PostgreSQL and encrypted media after coordinated writer shutdown and recover units after failed publication.
+  - name: hub-backup-coordination
+    file: lx-annotate/test_hub_backup_coordination.py
+    purpose: Reject escaped backup destinations and recover writer state around fresh database/media capture.
+  - name: python-quality-policy
+    file: test_python_quality.py
+    purpose: Reject substituted diagnostics and prove baseline updates can only lower existing debt.
+  - name: hub-authentication-startup
+    file: lx-annotate/test_hub_oidc_startup.py
+    purpose: Prove backend policy failures abort before the wheel application entrypoint and reject unchecked non-wheel hub startup.
+  - name: inventory-normalization
+    file: test_inventory_normalization.py
+    purpose: Reject normalized option collisions across inventory layers while preserving intentional overrides.
+  - name: reserved-boot-key
+    file: test_boot_stick_setup.py
+    purpose: Reject filesystem-backed boot keys and verify reserved partition identity and exact byte arithmetic.
+  - name: external-mount-identity
+    file: storage_manager/test_mount_identity.py
+    purpose: Require exact removable drive identity and encrypted storage before accepting an external mount.
+  - name: scheduled-upgrade-policy
+    file: test_scheduled_upgrade_policy.py
+    purpose: Evaluate pinned revision admission and forbid scheduled live activation or automatic reboot.
+  - name: migration-coverage-policy
+    file: test_storage_migration_policy.py
+    purpose: Compare canonical snapshot coverage with evaluated fleet writers and protected source mounts.
+  - name: retired-plain-root
+    file: test_unencrypted_storage.py
+    purpose: Reject retired plain-root installation and preserve bounded legacy recovery.
+  - name: remote-boot-access
+    file: test_remote_boot_access.py
+    purpose: Evaluate restricted initrd SSH and verify restored administrator credentials before installation.
+  - name: network-access
+    file: test_network_access.py
+    purpose: Validate the shared CIDR type and role-derived follower and leader allowlists.
+  - name: acknowledged-activation
+    file: test_activation.py
+    purpose: Exercise detached activation acknowledgement, compatibility checks and watchdog recovery.
+  - name: independent-custody
+    file: test_recovery_custody.py
+    purpose: Exercise independent age custody, legacy preservation and authenticated two-recipient backups.
+  - name: sudo-payload-isolation
+    file: test_storage_sudo_transport.py
+    purpose: Prove failed sudo authentication cannot consume secret operation payloads.
+  - name: boot-migration
+    file: test_boot_migration.py
+    purpose: Reject stale migration evidence, wrong targets and unsafe or uncertain installation retries.
+  - name: storage-readiness
+    file: test_storage_readiness.py
+    purpose: Exercise mandatory probe failures, explicit layout and disk identity admission.
+  - name: secure-boot-workflow
+    file: test_secure_boot_workflow.py
+    purpose: Reject stale signing generations and partial artifact conflicts before activation or replacement.
+  - name: storage-migration-backup
+    file: test_storage_migration_backup.py
+    purpose: Authenticate encrypted recovery archives and test snapshot failure cleanup and refusal boundaries.
+  - name: boot-storage
+    file: test_boot_storage.py
+    purpose: Verify fleet boot LUKS declarations and read-only recovery failure checks.
+  - name: root-guard
+    file: test_root_guard.py
+    purpose: Decide root-storage activation across disk states, identity, retention, EFI capacity and audited overrides.
+  - name: root-recovery
+    file: test_root_recovery.py
+    purpose: Classify complete observed storage and refuse generation selection on failed probes, incomplete members or interrupted conversion.
+  - name: migration-lifecycle
+    file: test_migration_lifecycle.py
+    purpose: Reject invalid or tampered migration stages and keep repeated transitions idempotent.
+  - name: host-backup
+    file: test_host_backup.py
+    purpose: Encrypt before writing, upsert and grow the backup container, verify by checksum, close on failure and prune old capture snapshots.
+  - name: installer-handoff
+    file: test_installer_handoff.py
+    purpose: Run only the plan's verified source in the RAM environment and hand root-created state back to its operator.
+  - name: migration-kexec-vm
+    file: nixtest/migration_kexec_vm_test.nix
+    purpose: A running host switches into RAM through kexec; pinned SSH must work, OCR must confirm a visible console banner, and the screen opens a root terminal only after the typed phrase.
+  - name: boot-default-hold-vm
+    file: nixtest/boot_default_hold_vm_test.nix
+    purpose: Under real UEFI firmware and systemd-boot, a held boot default survives power cuts and the hand-over boots the installed generation.
+  - name: root-guard-vm
+    file: nixtest/root_guard_vm_test.nix
+    purpose: Run the real preflight against plaintext, LUKS2 and interrupted disposable disks.
+  - name: boot-storage-vm
+    file: nixtest/boot_storage_vm_test.nix
+    purpose: Disposable plaintext-root compatibility and console/SSH LUKS unlock, partition/MD-array unlock, deferred startup and protected-write rejection.
+  - name: gc-10-backup-exports
+    file: lx-annotate/test_gc10_backup_exports.py
+    purpose: Evaluate host-only export mount dependencies and reject missing or wrong Backup identity before filesystem writes.
+  - name: storage-login-access-vm
+    file: nixtest/storage_login_access_vm_test.nix
+    purpose: Exercise real PAM logins, OpenBao and LUKS across lock, logout and cold boot.
+  - name: storage-login-access
+    file: test_storage_login_access.py
+    purpose: Verify account seal wrapping, fail-closed lifecycle ordering and PAM/Nix integration.
+  - name: role-centralization
+    file: test_repository_architecture_contract.py
+    purpose: Evaluate Podman and program overrides, independent server composition and proxy callback defaults.
+  - name: root-integrity-vm
+    file: nixtest/root_integrity_vm_test.nix
+    purpose: Disposable verified-store boot and tamper prototype with a synthetic release marker.
+  - name: root-integrity-source-isolation
+    file: test_root_integrity.py
+    purpose: Evaluate that unrelated local files cannot change the prototype image dependency.
+  - name: root-integrity-specification
+    file: root-integrity.yml
+    purpose: Source trust-boundary test expectations and explicit evidence limits; not readiness state.
+  - name: storage-cutover
+    file: test_storage_cutover.py
+    purpose: Unit tests with real rsync for resumable pre-copy, verified cutover and preserved sources.
+  - name: bao-migration
+    file: test_bao_migration.py
+    purpose: Verify absent-source reconciliation, conflict protection and interrupted writes.
+  - name: bao-migration-vm
+    file: nixtest/bao_migration_vm_test.nix
+    purpose: Run real Vault and OpenBao TLS services for repeatable logical migration.
+  - name: bao-migration-guest
+    file: nixtest/bao_migration_guest.py
+    purpose: Exercise the actual provisioning CLI using ephemeral guest-only secrets.
+  - name: secure-boot
+    file: test_secure_boot.py
+    purpose: Evaluate fleet Secure Boot public-certificate and keyless-host contracts.
+  - name: secure-boot-controller
+    file: test_secure_boot_controller.py
+    purpose: Exercise controller signing and host import with real lzbt, sbctl and sbverify.
+  - name: encryption-primitives
+    file: test_encryption_primitives.py
+    purpose: Real dm-verity tamper and authenticated synthetic recovery tests; not hardware or full boot evidence.
+  - name: openbao-local-vm
+    file: nixtest/openbao_local_vm_test.nix
+    purpose: Exercise TPM credentials and explicit passphrase enrollment, isolated OpenBao, cold boot and volume unlock through the openbao-local and
+      openbao-local-passphrase checks.
+  - name: openbao-local-guest
+    file: nixtest/openbao_local_guest.py
+    purpose: Initialize disposable test state and verify local API readiness without emitting secrets.
+  - name: openbao-local
+    file: test_openbao_local.py
+    purpose: Verify production platform and TPM bootstrap policy rejection with independent local/hub service evaluation.
+  - name: tpm-release
+    file: test_tpm_release.py
+    purpose: swtpm-backed TPM identity and mTLS release client contract.
+  - name: openbao-release-vm
+    file: nixtest/openbao_vm_test.nix
+    purpose: Exercise the hardened OpenBao unit on LUKS with isolated file-certificate clients, authorization, revocation, audit and reseal.
+  - name: openbao-release-guest
+    file: nixtest/openbao_release.py
+    purpose: Generate ephemeral VM-only credentials and verify HTTPS release API behavior; no TPM identity claim.
+  - name: openbao
+    file: test_openbao.py
+    purpose: Evaluate backend isolation, encrypted mount guards and TLS configuration.
+  - name: storage-recovery-escrow
+    file: test_storage_provision.py
+    purpose: Verify authenticated encrypted recovery copies, independent export, retries and conflict rejection.
+  - name: operator-storage-migration-vm
+    file: nixtest/operator_storage_migration_vm_test.nix
+    purpose: Verify actual LUKS copy, mount ordering, post-mount permissions and receipt reuse after reboot.
+  - name: operator-storage-migration
+    file: test_operator_storage_migration.py
+    purpose: Exercise startup copy integrity, existing destination conflicts, receipts and exclusive container creation.
+  - name: storage-boot-ordering
+    file: test_storage_boot_ordering.py
+    purpose: Evaluate gc-09's legacy storage graph against boot ordering cycles and mandatory nested-bind identity gates.
+  - name: operator-storage-helper-build
+    file: test_operator_storage_helper.py
+    purpose: Build the recovery helper with ShellCheck enabled and verify empty-service refusal before unlock or startup.
+  - name: operator-unlocked-storage
+    file: test_operator_unlocked_storage.py
+    purpose: Evaluate reusable storage validation, dependency gates, disabled isolation and generated site layouts.
+  - name: runtime-private-credentials
+    file: test_runtime_private_credentials.py
+    purpose: Verify private runtime credential copies preserve source values and reject invalid inputs without replacing existing copies.
+  - name: vault-tls-storage
+    file: test_vault_server_tls_rotation.py
+    purpose: Verify CA-preserving leaf renewal, encrypted mount dependencies, disk-swap exclusion and opt-out behavior.
+  - name: vault-network-policy
+    file: test_vault_network_policy.py
+    purpose: Evaluate inventory-derived Vault endpoints, certificate IPs and VPN DNS pinning.
+  - name: hub-secret-fetch
+    file: test_hub_secret_fetch.py
+    purpose: Verify last-accepted-value hub secret delivery, outage tolerance and rejection of stale, empty or denied answers.
+  - name: hub-secret-backend
+    file: test_hub_secret_backend.py
+    purpose: Evaluate hub and site under the vault and openbao backends, declared secret delivery, token hosts and site policy scope.
+  - name: ca-trust
+    file: test_ca_trust.py
+    purpose: Reject distrusted roots in either PEM form and repair or check virtualenv certifi bundles.
+  - name: application-port-policy
+    file: lx-annotate/test_application_port_policy.py
+    purpose: Evaluate the application port alias, proxy propagation and conflicting assignments.
+  - name: monitoring-port-policy
+    file: test_monitoring_service_contract.py
+    purpose: Evaluate monitoring proxy ports against effective service listeners.
+  - name: package-selection
+    file: test_package_selection.py
+    purpose: Evaluate package merging, deduplication, role gating and invalid selections.
+  - name: vpn-source-of-truth
+    file: test_aglnet_ssot.py
+    purpose: Evaluate shared VPN route, DNS and domain inputs with explicit client overrides.
+  - name: redis-source-of-truth
+    file: test_redis_service_contract.py
+    purpose: Evaluate shared Redis port propagation to the server, proxy and firewall.
+  - name: identity-runtime-injection
+    file: test_identity_secrets_runtime.py
+    purpose: Verify retired central launcher and provisioner reject before network, execution or file access.
+  - name: managed-secret-storage
+    file: test_managed_secret_storage.py
+    purpose: Exercise encrypted block ancestry, runtime memory, swap rejection and refresh failure.
+  - name: center-identity-enrollment
+    file: lx-annotate/test_identity_salt_enrollment.py
+    purpose: Reject central salt options and execute Vault enrollment without salt publication or read grants.
+  - name: keycloak-vault-secret
+    file: lx-annotate/test_keycloak_vault_secret.py
+    purpose: Verify opt-in Vault delivery of the shared Keycloak client secret and the custodian publish guard.
+  - name: identity-salt-provisioning
+    file: lx-annotate/test_identity_salt_provisioning.py
+    purpose: Exercise atomic generation publication, rollback rejection and retained source matching salts.
+  - name: encrypted-data-mount-contract
+    file: lx-annotate/test_encrypted_data_mount.py
+    purpose: Execute rendered mount guards against matching and mismatched encrypted-volume probes.
+  - name: secret-rotation-contracts
+    file: test_secret_rotation_catalog.py
+    purpose: Verify catalog boundaries, gate order and missing source rejection.
+  - name: pytest-config
+    file: ../pyproject.toml
+    purpose: Inspect pytest config ownership and interfaces.
+  - name: configuration-suite
+    file: run-configuration-tests.sh
+    purpose: Inspect configuration suite ownership and interfaces.
+  - name: autoconf-map
+    file: autoconf.yml
+    purpose: Inspect autoconf map ownership and interfaces.
+  - name: context-contracts
+    file: test_structure.py
+    purpose: Inspect context contracts ownership and interfaces.
+dependencies:
+  internal:
+    - lx_administration
+    - modules
+    - scripts
+  external:
+    - pytest
+    - nixtest
+    - NixOS VMs
+submodules: []
+contracts:
+  - name: testing-nixtests
+    doc: ../docs/testing-nixtests.md
+  - name: README
+    doc: nixtest/README.md
+tests:
+  directory: .
+  command: python -m pytest -q tests/test_structure.py tests/test_test_layout_contract.py

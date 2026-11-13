@@ -1,0 +1,152 @@
+version: 1
+tier: package
+path: lx_administration/storage
+parent: ../structure.yml
+summary: Storage management and hub data-plane interfaces.
+responsibilities:
+  - Manage storage paths and mounts through explicit calls
+  - Validate hub envelopes and data-plane contracts
+boundaries:
+  - Do not mount or alter live storage during context validation
+  - Preserve encrypted storage and hub authentication boundaries
+entrypoints:
+  - name: ram-command
+    file: ram_boot.py
+    purpose: Push a verified operator helper and settings, build the host-bound RAM bundle under normal target Nix trust, and start through the existing typed kexec workflow without manually entered store paths.
+  - name: fresh-install
+    file: fresh_install.py
+    purpose: Build an immutable single or multidisk fresh installer, admit explicit disk erasure, resume verified installation without formatting and inspect existing encrypted storage without migration state.
+  - name: fresh-installer-bundle
+    file: fresh-installer.nix
+    purpose: Package pinned closure, Disko script, public hardware plan and Python runtime without credentials.
+  - name: migration-boot
+    file: migration_boot.py
+    purpose: Discover reusable build settings; prepare fresh console-approved images and verify or arm their one-shot firmware boot in one command; admit signed or console-approved bundles without rebooting or encrypting; hold the migration default during conversion and hand it to the encrypted generation; retain optional kexec with a pinned SSH host key.
+  - name: credential-backup
+    file: credential_backup.py
+    purpose: Authenticated credential archives with stable media identity, preserved account sources and explicit drift rejection.
+  - name: credential-backup-policy
+    file: credential-backup-policy.yml
+    purpose: Bounded optional credential scope and non-authoritative retirement candidates; no deletion rules.
+  - name: boot-guide
+    file: boot_guide.py
+    purpose: One resumable command for the current host that measures what it can, prepares custody and asks the operator to confirm only what it cannot prove.
+  - name: in-place-encryption
+    file: in_place.py
+    purpose: Encrypt independent Btrfs root and data partitions in place with LUKS2, resume interruptions, enroll secondary keys on encrypted root, move container data onto its destination filesystem and retire containers after acceptance.
+  - name: secret-preflight
+    file: secret_preflight.py
+    purpose: Verify from the evaluated host configuration that only the secrets it needs exist, match and decrypt on independent encrypted custody, then write the receipt recovery review requires.
+  - name: disk-password-custody
+    file: password_custody.py
+    purpose: Privately prompt and disclose verified disk credentials once until acknowledged, with receipts bound to encrypted vault records.
+  - name: boot-password-setup
+    file: boot_password.py
+    purpose: Prompt for root passphrase setup or changes, enroll an additional key file on removable media, preserve recovery slots, and bind verification receipts to host and LUKS header before activation.
+  - name: recovery-export
+    file: recovery_export.py
+    purpose: Share explicit optimized-Python-safe validation and private publication of encrypted recovery records.
+  - name: migration-policy
+    file: migration_policy.py
+    purpose: Validate canonical writer and source coverage for snapshots and backup transport.
+  - name: migration-policy-input
+    file: migration-policy.yml
+    purpose: Declare reviewed migration hosts, protected source mounts and application writer units.
+  - name: independent-recovery-custody
+    file: recovery_custody.py
+    purpose: Prepare dedicated age identities and verify independently decryptable recovery envelopes without replacing originals.
+  - name: recovery-media
+    file: recovery_media.py
+    purpose: Discover existing external filesystems, verify independent writable recovery media and prepare private setup state without formatting.
+  - name: boot-setup-guidance
+    file: boot-setup-guidance.yml
+    purpose: Explain each required human recovery and acceptance assessment without automatically approving evidence.
+  - name: boot-setup
+    file: boot_setup.py
+    purpose: In-place-only LUKS2 setup, typed journals and verified non-formatting recovery; no Disko executor. Provides read-only journal inspection and replaces outdated unstarted plans only during explicit migration setup. Stops before planning when this host's live root is already LUKS2 and it has no plan.
+  - name: boot-migration
+    file: boot_migration.py
+    purpose: Bind in-place LUKS2 plans to hardware checks, reviewed evidence and install-only actions; old destructive plans are read-only evidence.
+  - name: storage-readiness
+    file: readiness.py
+    purpose: Collect observations or reject incomplete host, layout and disk-identity admission without changing storage.
+  - name: migration-archive
+    file: migration_archive.py
+    purpose: Shared streaming encryption and authenticated archive verification, including RAM-only identity use for host-local backup recovery.
+  - name: migration-snapshot
+    file: snapshot.py
+    purpose: Quiesce selected application writers, preserve read-only Btrfs snapshots and restore prior service state.
+  - name: migration-backup
+    file: migration_backup.py
+    purpose: Stream inventory-scoped snapshots into authenticated age archives without deleting or restoring storage.
+  - name: root-guard
+    file: root_guard.py
+    purpose: Target-host preflight comparing one generation's root-storage contract with the physical disk; ships in the host closure.
+  - name: root-recovery
+    file: root_recovery.py
+    purpose: Classify a root partition from its own metadata and select a matching generation from recovery media without touching disk data.
+  - name: recovery-image
+    file: recovery-image.nix
+    purpose: Self-contained recovery ISO and tool with no host closure or application dependency.
+  - name: migration-lifecycle
+    file: migration_lifecycle.py
+    purpose: Durable, ordered migration stages; history only and never proof of disk state.
+  - name: host-backup
+    file: host_backup.py
+    purpose: Before the migrate questions, capture consistent snapshots and upsert them into an encrypted container on the recovery drive, verified by checksum.
+  - name: installer-handoff
+    file: installer_handoff.py
+    purpose: RAM-image launcher that verifies the plan's own source copy on the recovery drive, runs it, and returns root-created state to the plan's operator.
+  - name: boot-storage
+    file: boot.py
+    purpose: Read-only root setup guidance, actual mount identity, Btrfs member and protected key checks before activation or consumers.
+  - name: login-access
+    file: login_access.py
+    purpose: Coordinate root-only OpenBao login credentials, guarded service startup and non-forced storage locking.
+  - name: cutover
+    file: cutover.py
+    purpose: Background pre-copy and short-stop cutover into encrypted storage without modifying sources.
+  - name: bao-migration
+    file: bao_migration.py
+    purpose: Idempotent allowlisted KV v2 provisioning with CAS and verified target-only operation after Vault retirement.
+  - name: openbao-local
+    file: openbao_local.py
+    purpose: Validate explicit TPM admission or passphrase-wrapped seals with authenticated runtime staging; never initialize state at boot.
+  - name: storage-provision
+    file: provision.py
+    purpose: Verify and escrow existing root or container passwords with independent recovery custody; retain bounded legacy provisioning without implicit formatting.
+  - name: tpm-release
+    file: tpm_release.py
+    purpose: Create and verify the non-exportable TPM client identity and fetch one volume release over mTLS.
+  - name: operator-migration
+    file: operator_migration.py
+    purpose: >-
+      Unlock existing containers, explicitly provision escrowed new volumes
+      and verify resumable copies without formatting at startup or overwriting storage;
+      explicitly retire matching native mount overrides with backup and rollback.
+  - name: manager
+    file: manager.py
+    purpose: Inspect manager ownership and interfaces.
+  - name: data-plane
+    file: data_plane.py
+    purpose: Inspect data plane ownership and interfaces.
+  - name: envelopes
+    file: envelope.py
+    purpose: Inspect envelopes ownership and interfaces.
+dependencies:
+  internal:
+    - systems
+    - modules/nixos
+    - lx_administration/autoconf
+  external:
+    - Nix and Disko
+    - cryptography
+    - mTLS
+    - filesystem mounts
+submodules: []
+contracts:
+  - name: hardware-setup
+    doc: ../../docs/hardware-setup.md
+tests:
+  directory: ../../tests/storage_manager
+  command: python -m pytest -q tests/storage_manager

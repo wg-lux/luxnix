@@ -1,0 +1,16 @@
+mcp.example.org {
+    encode zstd gzip
+
+    @health path /health
+    handle @health {
+        reverse_proxy 127.0.0.1:8765
+    }
+
+    handle {
+        reverse_proxy 127.0.0.1:8765 {
+            transport http {
+                versions 1.1 2
+            }
+        }
+    }
+}

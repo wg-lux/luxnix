@@ -4,15 +4,17 @@
   pkgs,
   ...
 }:
-with lib; 
-with lib.luxnix; let
+with lib;
+with lib.luxnix;
+let
   cfg = config.services.luxnix.gitea;
   theme = pkgs.fetchzip {
     url = "https://github.com/catppuccin/gitea/releases/download/v0.4.1/catppuccin-gitea.tar.gz";
     hash = "sha256-14XqO1ZhhPS7VDBSzqW55kh6n5cFZGZmvRCtMEh8JPI=";
     stripRoot = false;
   };
-in {
+in
+{
   options.services.luxnix.gitea = {
     enable = mkBoolOpt false "Enable gitea self hosted git server";
   };
@@ -25,9 +27,10 @@ in {
 
     systemd.services = {
       gitea = {
-        preStart = let
-          inherit (config.services.gitea) stateDir;
-        in
+        preStart =
+          let
+            inherit (config.services.gitea) stateDir;
+          in
           mkAfter ''
             rm -rf ${stateDir}/custom/public/assets
             mkdir -p ${stateDir}/custom/public/assets
@@ -75,7 +78,7 @@ in {
       };
 
       postgresql = {
-        ensureDatabases = ["gitea"];
+        ensureDatabases = [ "gitea" ];
         ensureUsers = [
           {
             name = "gitea";
@@ -95,7 +98,7 @@ in {
 
             routers = {
               gitea = {
-                entryPoints = ["websecure"];
+                entryPoints = [ "websecure" ];
                 rule = "Host(`git.homelab.haseebmajid.dev`)";
                 service = "gitea";
                 tls.certResolver = "letsencrypt";

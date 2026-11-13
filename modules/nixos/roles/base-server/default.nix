@@ -1,81 +1,30 @@
 {
-  pkgs,
   lib,
   config,
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.base-server;
-in {
+in
+{
   options.roles.base-server = {
-    enable = mkEnableOption "Enable base desktop server configuration";
+    enable = mkEnableOption "Enable base server configuration";
   };
 
   config = mkIf cfg.enable {
-
-    
-    services.ssh = {
-      enable = true;
-        authorizedKeys = [ 
-        "${config.luxnix.generic-settings.rootIdED25519}" 
-        ];
-      };
-
-    cli.programs.nix-ld = {
-      enable = true;
-      libraries = with pkgs; [
-          stdenv.cc.cc
-          zlib
-          fuse3
-          icu
-          nss
-          openssl
-          curl
-          expat
-          libGLU
-          libGL
-          git
-          gitRepo
-          gnupg
-          autoconf
-          procps
-          gnumake
-          util-linux
-          m4
-          gperf
-          glib
-          glibc
-          unzip
-          xorg.libXi
-          xorg.libXmu
-          freeglut
-          xorg.libXext
-          xorg.libX11
-          xorg.libXv
-          xorg.libXrandr
-          ncurses5
-          stdenv.cc
-          binutils
-          pkgs.autoAddDriverRunpath
-      ];
-    };
-    
-    boot.binfmt.emulatedSystems = [
-      # "aarch64-linux"
-    ];
+    # Servers and the central hub serve the VPN; this outranks the follower
+    # tier that endoreg-client sets on hub hosts.
+    luxnix.networkAccess.tier = lib.luxnix.networkAccess.mkTierDefault "leader";
 
     roles = {
-      desktop.enable = true;
+      common.enable = true;
       custom-packages.baseDevelopment = true;
     };
 
     services = {
       luxnix.avahi.enable = false;
-      virtualisation.podman.enable = lib.mkDefault true;
     };
-  
-
-    
   };
 }

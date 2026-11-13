@@ -1,0 +1,33 @@
+version: 1
+tier: domain
+path: modules
+parent: ../structure.yml
+summary: Reusable infrastructure behavior split between NixOS and Home Manager ownership.
+responsibilities:
+- Route system behavior to NixOS modules
+- Route user environment behavior to Home Manager modules
+boundaries:
+- Do not duplicate module behavior in host files
+- Keep application business logic in upstream application repositories
+entrypoints: []
+dependencies:
+  internal:
+  - packages
+  external:
+  - NixOS module system
+  - Home Manager
+submodules:
+- name: nixos
+  path: nixos
+  manifest: nixos/structure.yml
+  summary: System options, atomic service modules, roles, and profiles consumed by hosts.
+- name: home
+  path: home
+  manifest: home/structure.yml
+  summary: Reusable user environment options and CLI or desktop configuration.
+contracts:
+- name: architecture
+  doc: ../docs/architecture.md
+tests:
+  directory: ../tests
+  command: python -m pytest -q tests/test_repository_architecture_contract.py

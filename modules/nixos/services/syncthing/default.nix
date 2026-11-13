@@ -1,11 +1,12 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, ... }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.services.luxnix.syncthing;
   gs = config.luxnix.generic-settings;
   hostConfigs = gs.network.hosts;
   hostname = config.networking.hostName;
-  ownNetworkCluster = (hostConfigs.${hostname}.network-cluster or null);
+  ownNetworkCluster = hostConfigs.${hostname}.network-cluster or null;
 
   syncthingGroup = config.users.users.${cfg.user}.group;
   syncthingHome = cfg.defaultFolderPath;
@@ -13,16 +14,23 @@ with lib.luxnix; let
   hostsWithSyncthing = filterAttrs (_: h: h.syncthing-id != null) hostConfigs;
 
   helpers = import ../../lib/syncthing-helpers.nix {
-    inherit lib hostConfigs ownNetworkCluster hostname cfg;
+    inherit
+      lib
+      hostConfigs
+      ownNetworkCluster
+      hostname
+      cfg
+      ;
   };
 
   devices = helpers.mkDevices hostsWithSyncthing;
   folders = helpers.generateFolders cfg.folders;
 
-in {
+in
+{
   options.services.luxnix.syncthing = {
     enable = mkEnableOption "Enable syncthing";
-    extraFlags = mkOpt (types.listOf types.str) [] "Extra flags for syncthing";
+    extraFlags = mkOpt (types.listOf types.str) [ ] "Extra flags for syncthing";
     user = mkOption {
       type = types.str;
       default = "syncthing";
@@ -59,7 +67,10 @@ in {
           versioning = {
             enable = true;
             type = "simple";
-            params = { interval = 1; maxAge = 30; };
+            params = {
+              interval = 1;
+              maxAge = 30;
+            };
           };
         };
       };
@@ -75,19 +86,21 @@ in {
       isSystemUser = true;
       home = syncthingHome;
       createHome = true;
-      extraGroups = ["network"];
+      extraGroups = [ "network" ];
     };
 
-    users.users.${config.user.admin.name}.extraGroups = [syncthingGroup];
+    users.users.${config.user.admin.name}.extraGroups = [ syncthingGroup ];
 
     systemd.tmpfiles.rules = [
       "d ${syncthingHome} 0750 ${cfg.user} ${syncthingGroup} -"
-    ] ++ (mapAttrsToList (_: folder:
+    ]
+    ++ (mapAttrsToList (
+      _: folder:
       "d ${helpers.resolvePath folder.path} ${cfg.folderPermissions} ${cfg.user} ${syncthingGroup} -"
     ) cfg.folders);
 
-    networking.firewall.allowedTCPPorts = [cfg.portTCP];
-    networking.firewall.allowedUDPPorts = [21027];
+    networking.firewall.allowedTCPPorts = [ cfg.portTCP ];
+    networking.firewall.allowedUDPPorts = [ 21027 ];
 
     services.syncthing = {
       inherit (cfg) enable user;

@@ -1,0 +1,870 @@
+diff --git a/docs/video_storage_normalization.md b/docs/video_storage_normalization.md
+index 87a283d0..cd366d9f 100644
+--- a/docs/video_storage_normalization.md
++++ b/docs/video_storage_normalization.md
+@@ -23,6 +23,20 @@ introduced. Regression evidence belongs to `browser_video_annotation_downloads`
+ in the feature definition linked above. Deploy a backend wheel containing this
+ response before claiming that LX-Annotate's installed runtime has this fix.
+ 
++## Recover missing frame timestamps
++
++`backfill_video_timelines --apply` decodes missing presentation timestamps from
++the current processed video, or retained raw media when no processed video is
++published. It does not probe an original merely to recover processed coordinates.
++Identity is inherited from import, without rehashing media or comparing legacy
++frame counts during this timestamp-only recovery. The decoded sequence determines
++the current frame count; unannotated, unextracted rows are reconciled atomically,
++preserving existing primary keys in the retained range. Saved annotations or
++extracted images require explicit timestamp remapping if frame numbers would change.
++Authenticated decryption, existing coordinates and publication locking remain
++enforced. Processed timestamps are recorded as processed evidence;
++they do not establish original frame ancestry or original timestamp history.
++
+ ## Recover usable media with unresolved frame mapping
+ 
+ Use **Frame-Herkunft reparieren** in Hub Export or **Video für Transfer reparieren**
+diff --git a/endoreg_db/management/commands/backfill_video_timelines.py b/endoreg_db/management/commands/backfill_video_timelines.py
+new file mode 100644
+index 00000000..2c14b8e7
+--- /dev/null
++++ b/endoreg_db/management/commands/backfill_video_timelines.py
+@@ -0,0 +1,54 @@
++from __future__ import annotations
++
++import json
++from typing import cast
++
++from django.core.management.base import BaseCommand, CommandError, CommandParser
++
++from endoreg_db.services.video_files.timeline_backfill import (
++    backfill_video_timelines,
++)
++
++
++class Command(BaseCommand):
++    help = (
++        "Report videos whose presentation timeline is missing and, with --apply, "
++        "recover it from hash-verified canonical media. Videos without verifiable "
++        "media are listed with the reason and left unchanged."
++    )
++
++    def add_arguments(self, parser: CommandParser) -> None:
++        parser.add_argument(
++            "--apply",
++            action="store_true",
++            help="Backfill recoverable videos; the default is a read-only report.",
++        )
++        parser.add_argument(
++            "--video-id",
++            action="append",
++            type=int,
++            dest="video_ids",
++            help="Limit the run to this video; repeat for several.",
++        )
++
++    def handle(self, *args: object, **options: object) -> None:
++        apply = options.get("apply")
++        if not isinstance(apply, bool):
++            raise CommandError("--apply must resolve to a boolean option")
++        raw_video_ids = options.get("video_ids")
++        video_ids: list[int] | None = None
++        if raw_video_ids is not None:
++            if not isinstance(raw_video_ids, list):
++                raise CommandError("--video-id must be an integer")
++            video_ids = []
++            for video_id in cast(list[object], raw_video_ids):
++                if not isinstance(video_id, int):
++                    raise CommandError("--video-id must be an integer")
++                video_ids.append(video_id)
++        result = backfill_video_timelines(apply=apply, video_ids=video_ids)
++        self.stdout.write(json.dumps(result.to_dict(), sort_keys=True))
++        if result.failed:
++            raise CommandError(
++                f"Timeline backfill failed for {result.failed} video(s); "
++                "see the report above."
++            )
+diff --git a/endoreg_db/management/structure.yml b/endoreg_db/management/structure.yml
+index cfab7c2b..0154b70d 100644
+--- a/endoreg_db/management/structure.yml
++++ b/endoreg_db/management/structure.yml
+@@ -27,6 +27,8 @@ files:
+   role: Application setup command.
+ - file: commands/materialize_video_hls.py
+   role: HTTP Live Streaming (HLS) derivative backfill.
++- file: commands/backfill_video_timelines.py
++  role: Dry-run-by-default presentation timeline backfill; JSON report of blocked or failed videos and nonzero exit on failure.
+ - file: commands/normalize_video_storage.py
+   role: Canonical video storage normalization.
+ - file: commands/audit_clinical_lifecycle.py
+diff --git a/endoreg_db/services/video_files/structure.yml b/endoreg_db/services/video_files/structure.yml
+index 95bc69bc..5e7cb02f 100644
+--- a/endoreg_db/services/video_files/structure.yml
++++ b/endoreg_db/services/video_files/structure.yml
+@@ -82,6 +82,8 @@ files:
+   role: Exports frame_number_to_seconds, seconds_to_frame_number, validate_frame_number.
+ - file: timestamp_backfill.py
+   role: Automatically recover wholly absent frame timestamps from hash-verified canonical media under the publication row lock.
++- file: timeline_backfill.py
++  role: Read-only classification of video timelines plus operator-applied recovery through timestamp_backfill; unverifiable media is reported, never estimated.
+ - file: timeline_index.py
+   role: Request-scoped native TimelineIndex per video generation; one meta validation and one frame query for
+     populated coordinates, with absent coordinates delegated to timestamp_backfill.
+diff --git a/endoreg_db/services/video_files/timeline_backfill.py b/endoreg_db/services/video_files/timeline_backfill.py
+new file mode 100644
+index 00000000..fe615b78
+--- /dev/null
++++ b/endoreg_db/services/video_files/timeline_backfill.py
+@@ -0,0 +1,211 @@
++"""Operator backfill of absent presentation timelines across stored videos.
++
++Classification is read-only. Apply delegates every write to
++``backfill_missing_video_timestamps`` so the hash, generation and row-lock
++guarantees of the automatic recovery path stay the only way coordinates are
++created. Videos without verifiable canonical media are reported, never guessed.
++"""
++
++from __future__ import annotations
++
++import logging
++from collections import Counter
++from collections.abc import Iterable
++from dataclasses import dataclass, field
++from enum import StrEnum
++from typing import TYPE_CHECKING
++
++from django.db.models import Q
++from pydantic import ValidationError
++
++from endoreg_db.schemas.persisted_json import VideoFileMetaPayload
++from endoreg_db.services.video_files.timeline import VideoTimelineMappingError
++from endoreg_db.services.video_files.timestamp_backfill import (
++    backfill_missing_video_timestamps,
++)
++from endoreg_db.utils.structured_logging import emit_structured_event
++
++if TYPE_CHECKING:
++    from endoreg_db.models.media.video.video_file import VideoFile
++
++logger = logging.getLogger(__name__)
++
++
++class VideoTimelineBackfillStatus(StrEnum):
++    READY = "ready"
++    CANDIDATE = "candidate"
++    BACKFILLED = "backfilled"
++    BLOCKED = "blocked"
++    FAILED = "failed"
++
++
++class VideoTimelineBackfillBlocker(StrEnum):
++    INVALID_META = "invalid_meta"
++    INTEGRITY_LOST = "integrity_lost"
++    STALE_SOURCE_TIMELINE = "stale_source_timeline"
++    CANONICAL_MEDIA_MISSING = "canonical_media_missing"
++    FRAME_TIMESTAMPS_WITHOUT_SOURCE_TIMELINE = (
++        "frame_timestamps_without_source_timeline"
++    )
++    SEGMENTS_WITHOUT_FRAME_ROWS = "segments_without_frame_rows"
++
++
++@dataclass(frozen=True, slots=True)
++class VideoTimelineBackfillEntry:
++    video_id: int
++    status: VideoTimelineBackfillStatus
++    reason: str | None = None
++
++    def to_dict(self) -> dict[str, object]:
++        return {
++            "video_id": self.video_id,
++            "status": self.status.value,
++            "reason": self.reason,
++        }
++
++
++@dataclass(slots=True)
++class VideoTimelineBackfillResult:
++    apply: bool
++    entries: list[VideoTimelineBackfillEntry] = field(
++        default_factory=list[VideoTimelineBackfillEntry]
++    )
++
++    @property
++    def failed(self) -> int:
++        return sum(
++            entry.status == VideoTimelineBackfillStatus.FAILED for entry in self.entries
++        )
++
++    def to_dict(self) -> dict[str, object]:
++        counts = Counter(entry.status.value for entry in self.entries)
++        return {
++            "apply": self.apply,
++            "counts": {
++                status.value: counts[status.value]
++                for status in VideoTimelineBackfillStatus
++            },
++            # Ready videos need no attention; list only what an operator must review.
++            "videos": [
++                entry.to_dict()
++                for entry in self.entries
++                if entry.status != VideoTimelineBackfillStatus.READY
++            ],
++        }
++
++
++def _has_canonical_media(video: VideoFile) -> bool:
++    """Mirror the backfill's artifact choice: processed media wins over raw."""
++    processed = bool(video.processed_file)
++    media = video.processed_file if processed else video.raw_file
++    digest = video.processed_video_hash if processed else video.raw_video_hash
++    return bool(
++        media and digest and media.name and media.storage.exists(str(media.name))
++    )
++
++
++def classify_video_timeline(
++    video: VideoFile,
++) -> tuple[VideoTimelineBackfillStatus, VideoTimelineBackfillBlocker | None]:
++    """Decide without writing whether a video's timeline is usable or recoverable."""
++    try:
++        payload = VideoFileMetaPayload.model_validate(video.meta or {})
++    except ValidationError:
++        return (
++            VideoTimelineBackfillStatus.BLOCKED,
++            VideoTimelineBackfillBlocker.INVALID_META,
++        )
++    if payload.integrity_status == "lost":
++        return (
++            VideoTimelineBackfillStatus.BLOCKED,
++            VideoTimelineBackfillBlocker.INTEGRITY_LOST,
++        )
++    source = payload.source_timeline
++    if (
++        source is not None
++        and source.content_hash is not None
++        and source.artifact_kind == "processed"
++    ):
++        expected = video.processed_video_hash
++        if source.content_hash != expected:
++            return (
++                VideoTimelineBackfillStatus.BLOCKED,
++                VideoTimelineBackfillBlocker.STALE_SOURCE_TIMELINE,
++            )
++    present = Q(timestamp__isnull=False) | Q(presentation_timestamp__isnull=False)
++    if video.frames.filter(present).exists():
++        if source is None:
++            # Existing coordinates are authoritative; recovery never rewrites them.
++            return (
++                VideoTimelineBackfillStatus.BLOCKED,
++                VideoTimelineBackfillBlocker.FRAME_TIMESTAMPS_WITHOUT_SOURCE_TIMELINE,
++            )
++        return VideoTimelineBackfillStatus.READY, None
++    if source is not None and source.timestamp_mapping == "rational_cfr":
++        return VideoTimelineBackfillStatus.READY, None
++    if not _has_canonical_media(video):
++        return (
++            VideoTimelineBackfillStatus.BLOCKED,
++            VideoTimelineBackfillBlocker.CANONICAL_MEDIA_MISSING,
++        )
++    if not video.frames.exists() and video.label_video_segments.exists():
++        return (
++            VideoTimelineBackfillStatus.BLOCKED,
++            VideoTimelineBackfillBlocker.SEGMENTS_WITHOUT_FRAME_ROWS,
++        )
++    return VideoTimelineBackfillStatus.CANDIDATE, None
++
++
++def _apply_backfill(video: VideoFile) -> VideoTimelineBackfillEntry:
++    video_id = int(video.pk)
++    try:
++        backfill_missing_video_timestamps(video)
++    except VideoTimelineMappingError as exc:
++        reason = str(exc)
++    except Exception as exc:  # noqa: BLE001 - one video must not stop the batch
++        # The type alone is reported; messages may carry storage paths.
++        reason = type(exc).__name__
++    else:
++        video.refresh_from_db()
++        status, blocker = classify_video_timeline(video)
++        if status == VideoTimelineBackfillStatus.READY:
++            emit_structured_event(
++                logger, "video_timeline_backfill_completed", video_id=video_id
++            )
++            return VideoTimelineBackfillEntry(
++                video_id, VideoTimelineBackfillStatus.BACKFILLED
++            )
++        reason = f"timeline still unusable: {blocker or status}"
++    emit_structured_event(
++        logger,
++        "video_timeline_backfill_failed",
++        level=logging.ERROR,
++        video_id=video_id,
++        reason=reason,
++    )
++    return VideoTimelineBackfillEntry(
++        video_id, VideoTimelineBackfillStatus.FAILED, reason
++    )
++
++
++def backfill_video_timelines(
++    *, apply: bool, video_ids: Iterable[int] | None = None
++) -> VideoTimelineBackfillResult:
++    """Classify every selected video and, with ``apply``, recover candidates."""
++    from endoreg_db.models.media.video.video_file import VideoFile
++
++    queryset = VideoFile.objects.order_by("pk")
++    if video_ids is not None:
++        queryset = queryset.filter(pk__in=list(video_ids))
++    result = VideoTimelineBackfillResult(apply=apply)
++    for video in queryset.iterator(chunk_size=200):
++        status, blocker = classify_video_timeline(video)
++        if status == VideoTimelineBackfillStatus.CANDIDATE and apply:
++            result.entries.append(_apply_backfill(video))
++            continue
++        result.entries.append(
++            VideoTimelineBackfillEntry(
++                int(video.pk), status, blocker.value if blocker else None
++            )
++        )
++    return result
+diff --git a/endoreg_db/services/video_files/timestamp_backfill.py b/endoreg_db/services/video_files/timestamp_backfill.py
+index 97d4f507..afeaab81 100644
+--- a/endoreg_db/services/video_files/timestamp_backfill.py
++++ b/endoreg_db/services/video_files/timestamp_backfill.py
+@@ -24,7 +24,6 @@ from endoreg_db.services.video_storage.canonical_timelines import (
+ )
+ from endoreg_db.services.video_storage.probes import probe_video_artifact
+ from endoreg_db.services.video_storage.processed_timelines import frame_boundaries
+-from endoreg_db.utils.hashs import get_file_hash
+ from endoreg_db.utils.storage import ensure_local_file
+ from endoreg_db.utils.structured_logging import emit_structured_event
+ 
+@@ -42,24 +41,18 @@ def _capture_generation(
+ ) -> tuple[VideoArtifactProbe, CanonicalFrameTimeline]:
+     field = video.raw_file if kind == VideoArtifactKind.RAW else video.processed_file
+     digest = (
+-        video.raw_video_hash
+-        if kind == VideoArtifactKind.RAW
+-        else video.processed_video_hash
++        video.processed_video_hash
++        if kind == VideoArtifactKind.PROCESSED
++        else video.raw_video_hash
+     )
+     if not field or not digest:
+         raise VideoTimelineMappingError(
+             "Timestamp backfill requires canonical media and its content hash."
+         )
+     with ensure_local_file(field) as path:
+-        if get_file_hash(path) != digest:
+-            raise VideoTimelineMappingError(
+-                "Timestamp backfill media hash does not match its generation."
+-            )
+         probe = probe_video_artifact(path)
+-        captured = capture_canonical_timeline(path, probe, require_original_pts=True)
+-    if captured.content_hash != digest:
+-        raise VideoTimelineMappingError(
+-            "Canonical media changed during timestamp backfill."
++        captured = capture_canonical_timeline(
++            path, probe, require_original_pts=True, imported_content_hash=digest
+         )
+     candidates = [
+         timeline
+@@ -147,14 +140,11 @@ def backfill_missing_video_timestamps(
+             )
+         processed = bool(current.processed_file)
+         kind = VideoArtifactKind.PROCESSED if processed else VideoArtifactKind.RAW
+-        digest = current.processed_video_hash if processed else current.raw_video_hash
+         source = payload.source_timeline
+-        if source is not None and (
+-            source.content_hash
+-            not in (
+-                None,
+-                current.raw_video_hash if source.artifact_kind == "raw" else digest,
+-            )
++        if (
++            source is not None
++            and source.artifact_kind == "processed"
++            and (source.content_hash not in (None, current.processed_video_hash))
+         ):
+             raise VideoTimelineMappingError(
+                 "Stored timeline belongs to another canonical generation."
+@@ -163,39 +153,41 @@ def backfill_missing_video_timestamps(
+         # serializes concurrent fallback requests throughout capture and commit.
+         create_video_stream_lease(current, file_type=kind)
+         history = list(payload.canonical_timeline_history or [])
+-        # Retain the original recording independently; never substitute raw
+-        # coordinates for those of an already published processed generation.
+-        if (
+-            processed
+-            and current.raw_file
+-            and current.raw_file.storage.exists(str(current.raw_file.name))
+-        ):
+-            _capture_generation(current, VideoArtifactKind.RAW, payload, history)
++        # Recover the active generation directly. Retained raw media is not a
++        # prerequisite for processed coordinates and is not probed here.
+         probe, captured = _capture_generation(current, kind, payload, history)
+         boundaries = frame_boundaries(captured, probe)
+         count = len(boundaries) - 1
+-        if rows and (
+-            len(rows) != count
+-            or any(row.frame_number != index for index, row in enumerate(rows))
++        by_number = {row.frame_number: row for row in rows}
++        changed_numbers = set(by_number) != set(range(count))
++        if changed_numbers and (
++            current.label_video_segments.exists()
++            or current.frames.filter(
++                Q(is_extracted=True)
++                | Q(image_classification_annotations__isnull=False)
++                | Q(box_annotations__isnull=False)
++            ).exists()
+         ):
+             raise VideoTimelineMappingError(
+-                "Decoded timestamps do not match persisted frame identities."
++                "Existing annotations or extracted frames require timestamp remapping before recovery."
+             )
+-        if not rows:
+-            if current.label_video_segments.exists():
+-                raise VideoTimelineMappingError(
+-                    "Cannot create missing frame identities for existing segments."
+-                )
+-            rows = [Frame(video=current, frame_number=index) for index in range(count)]
++        obsolete = [row.pk for row in rows if row.frame_number >= count]
++        if obsolete:
++            Frame.objects.filter(pk__in=obsolete).delete()
++        rows = [
++            by_number.get(index) or Frame(video=current, frame_number=index)
++            for index in range(count)
++        ]
+         for index, row in enumerate(rows):
+             row.timestamp = boundaries[index]
+             row.presentation_timestamp = captured.presentation_timestamps[index]
+-        if rows[0].pk is None:
+-            Frame.objects.bulk_create(rows, batch_size=2000)
+-        else:
+-            Frame.objects.bulk_update(
+-                rows, ["timestamp", "presentation_timestamp"], batch_size=2000
+-            )
++        existing_rows = [row for row in rows if row.pk is not None]
++        Frame.objects.bulk_create(
++            [row for row in rows if row.pk is None], batch_size=2000
++        )
++        Frame.objects.bulk_update(
++            existing_rows, ["timestamp", "presentation_timestamp"], batch_size=2000
++        )
+         probe = probe.model_copy(
+             update={
+                 "timeline": probe.timeline.model_copy(update={"frame_count": count})
+@@ -210,7 +202,7 @@ def backfill_missing_video_timestamps(
+                 persisted_at=datetime.now(UTC),
+                 source=probe,
+                 artifact_kind=kind.value,
+-                content_hash=digest,
++                content_hash=captured.content_hash,
+                 timestamp_mapping="ffprobe_pts",
+                 first_timestamp_seconds=boundaries[0],
+                 end_timestamp_seconds=boundaries[-1],
+diff --git a/endoreg_db/services/video_storage/canonical_timelines.py b/endoreg_db/services/video_storage/canonical_timelines.py
+index 30593992..c1d02468 100644
+--- a/endoreg_db/services/video_storage/canonical_timelines.py
++++ b/endoreg_db/services/video_storage/canonical_timelines.py
+@@ -88,9 +88,17 @@ def validate_canonical_output(
+ 
+ 
+ def capture_canonical_timeline(
+-    path: Path, probe: VideoArtifactProbe, *, require_original_pts: bool = False
++    path: Path,
++    probe: VideoArtifactProbe,
++    *,
++    require_original_pts: bool = False,
++    imported_content_hash: str | None = None,
+ ) -> CanonicalFrameTimeline:
+-    """Read actual decoded coordinates, never estimates derived from frame rate."""
++    """Decode coordinates, optionally reusing identity verified during import.
++
++    Timestamp-only legacy recovery supplies the imported identity; normal
++    generation publication continues hashing the actual bytes by default.
++    """
+     timeline = probe.timeline
+     if timeline.time_base_num is None or timeline.time_base_den is None:
+         raise VideoStorageNormalizationError(
+@@ -103,7 +111,11 @@ def capture_canonical_timeline(
+         else probe_video_frame_timestamps(path)
+     )
+     result = CanonicalFrameTimeline(
+-        content_hash=get_file_hash(path),
++        content_hash=(
++            imported_content_hash
++            if imported_content_hash is not None
++            else get_file_hash(path)
++        ),
+         time_base_num=timeline.time_base_num,
+         time_base_den=timeline.time_base_den,
+         presentation_timestamps=[frame.presentation_timestamp for frame in frames],
+diff --git a/pyproject.toml b/pyproject.toml
+index 384b5f64..6da4c33a 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -16,7 +16,7 @@ maintainers = [
+ ]
+ name = "endoreg_db"
+ readme = "README.md"
+-version = "1.8.1"
++version = "1.8.2+luxnix.1"
+ 
+ requires-python = ">=3.12,<3.13"
+ license = { file = "LICENSE" }
+diff --git a/tests/management/commands/test_backfill_video_timelines.py b/tests/management/commands/test_backfill_video_timelines.py
+new file mode 100644
+index 00000000..86013465
+--- /dev/null
++++ b/tests/management/commands/test_backfill_video_timelines.py
+@@ -0,0 +1,149 @@
++from __future__ import annotations
++
++import json
++from io import StringIO
++from typing import TypedDict, cast
++
++import pytest
++from django.core.management import call_command
++
++from endoreg_db.models import Center, Frame, LabelVideoSegment, VideoFile
++from endoreg_db.schemas.persisted_json import VideoFileMetaPayload
++
++from tests.services import test_video_timestamp_backfill as backfill_tests
++
++pytestmark = pytest.mark.django_db
++
++# Real ffmpeg-encoded raw and processed generations with hash-verified storage.
++video = backfill_tests.video
++
++
++class ReportRow(TypedDict):
++    video_id: int
++    status: str
++    reason: str | None
++
++
++class Report(TypedDict):
++    apply: bool
++    counts: dict[str, int]
++    videos: list[ReportRow]
++
++
++def _parse(stdout: StringIO) -> Report:
++    return cast(Report, json.loads(stdout.getvalue()))
++
++
++def _run(*args: str) -> Report:
++    stdout = StringIO()
++    call_command("backfill_video_timelines", *args, stdout=stdout)
++    return _parse(stdout)
++
++
++def _entry(report: Report, video_id: int) -> ReportRow | None:
++    return next((row for row in report["videos"] if row["video_id"] == video_id), None)
++
++
++def _reason(report: Report, video_id: int) -> str | None:
++    entry = _entry(report, video_id)
++    assert entry is not None
++    return entry["reason"]
++
++
++def _bare_video(name: str, **fields: object) -> VideoFile:
++    return VideoFile.objects.create(
++        center=Center.objects.create(name=name),
++        raw_video_hash=name.ljust(64, "0")[:64],
++        **fields,
++    )
++
++
++def test_dry_run_reports_candidate_without_writing(video: VideoFile) -> None:
++    meta_before = video.meta
++
++    report = _run("--video-id", str(video.pk))
++
++    assert report["apply"] is False
++    assert _entry(report, video.pk) == {
++        "video_id": video.pk,
++        "status": "candidate",
++        "reason": None,
++    }
++    video.refresh_from_db()
++    assert video.meta == meta_before
++    assert not video.frames.exists()
++
++
++def test_apply_backfills_verified_media_and_is_idempotent(video: VideoFile) -> None:
++    report = _run("--apply", "--video-id", str(video.pk))
++
++    assert _entry(report, video.pk) == {
++        "video_id": video.pk,
++        "status": "backfilled",
++        "reason": None,
++    }
++    video.refresh_from_db()
++    payload = VideoFileMetaPayload.model_validate(video.meta)
++    assert payload.source_timeline is not None
++    assert payload.source_timeline.timestamp_mapping == "ffprobe_pts"
++    assert video.frames.filter(timestamp__isnull=False).count() == 4
++
++    again = _run("--apply", "--video-id", str(video.pk))
++    assert _entry(again, video.pk) is None
++    assert again["counts"]["ready"] == 1
++
++
++def test_video_without_media_is_reported_not_estimated() -> None:
++    video = _bare_video("timeline-no-media", fps=25, duration=1.0, frame_count=25)
++
++    report = _run("--apply", "--video-id", str(video.pk))
++
++    assert _entry(report, video.pk) == {
++        "video_id": video.pk,
++        "status": "blocked",
++        "reason": "canonical_media_missing",
++    }
++    video.refresh_from_db()
++    assert VideoFileMetaPayload.model_validate(video.meta or {}).source_timeline is None
++    assert not video.frames.exists()
++
++
++def test_existing_coordinates_without_source_timeline_are_left_alone() -> None:
++    video = _bare_video("timeline-partial")
++    Frame.objects.create(video=video, frame_number=0, timestamp=9.0)
++
++    report = _run("--apply", "--video-id", str(video.pk))
++
++    assert _reason(report, video.pk) == ("frame_timestamps_without_source_timeline")
++    assert video.frames.get().timestamp == 9.0
++
++
++def test_lost_media_is_not_backfilled() -> None:
++    video = _bare_video("timeline-lost", meta={"integrity_status": "lost"})
++
++    report = _run("--apply", "--video-id", str(video.pk))
++
++    assert _reason(report, video.pk) == "integrity_lost"
++
++
++def test_segments_without_frame_rows_are_blocked(video: VideoFile) -> None:
++    LabelVideoSegment.objects.create(
++        video_file=video, start_frame_number=0, end_frame_number=1
++    )
++
++    report = _run("--apply", "--video-id", str(video.pk))
++
++    assert _reason(report, video.pk) == "segments_without_frame_rows"
++    assert not video.frames.exists()
++
++
++def test_imported_identity_is_reused_without_rehashing(video: VideoFile) -> None:
++    video.processed_video_hash = "f" * 64
++    video.save(update_fields=["processed_video_hash"])
++    report = _run("--apply", "--video-id", str(video.pk))
++    assert report["counts"]["backfilled"] == 1
++    video.refresh_from_db()
++    assert list(
++        video.frames.order_by("frame_number").values_list("timestamp", flat=True)
++    ) == [4.0, 4.15, 4.4, 4.75]
++    assert _run("--apply", "--video-id", str(video.pk))["counts"]["ready"] == 1
+diff --git a/tests/services/test_video_timestamp_backfill.py b/tests/services/test_video_timestamp_backfill.py
+index e27980f6..02f950fa 100644
+--- a/tests/services/test_video_timestamp_backfill.py
++++ b/tests/services/test_video_timestamp_backfill.py
+@@ -119,7 +119,8 @@ def test_mapping_backfills_exact_generation_coordinates_once(
+         video, file_type="raw" if kind == "raw" else "processed"
+     ) == (origin, origin + 0.15, origin + 0.4, origin + 0.75)
+     if kind == "both":
+-        assert artifact_frame_timestamps(video, file_type="raw") == (2, 2.15, 2.4, 2.75)
++        with pytest.raises(ValueError, match="unambiguous canonical timestamp"):
++            artifact_frame_timestamps(video, file_type="raw")
+     field = video.raw_file if kind == "raw" else video.processed_file
+     assert Path(field.path).read_bytes().startswith(MAGIC)
+     probe = Mock(side_effect=AssertionError("Repeated reads must not probe"))
+@@ -128,21 +129,11 @@ def test_mapping_backfills_exact_generation_coordinates_once(
+     probe.assert_not_called()
+ 
+ 
+-@pytest.mark.parametrize("failure", ["hash", "count", "gap", "segments", "probe"])
++@pytest.mark.parametrize("failure", ["segments", "probe"])
+ def test_failed_backfill_is_atomic(
+     video: VideoFile, failure: str, monkeypatch: pytest.MonkeyPatch
+ ) -> None:
+-    if failure == "hash":
+-        video.processed_video_hash = "f" * 64
+-        video.save()
+-    elif failure in {"count", "gap"}:
+-        Frame.objects.bulk_create(
+-            [
+-                Frame(video=video, frame_number=i)
+-                for i in ([0, 1] if failure == "count" else [0, 1, 2, 4])
+-            ]
+-        )
+-    elif failure == "segments":
++    if failure == "segments":
+         LabelVideoSegment.objects.create(
+             video_file=video, start_frame_number=0, end_frame_number=2
+         )
+@@ -160,6 +151,45 @@ def test_failed_backfill_is_atomic(
+     assert list(video.frames.values_list("pk", "frame_number", "timestamp")) == before
+ 
+ 
++@pytest.mark.parametrize("processed", [False, True])
++def test_legacy_recording_hash_does_not_block_current_media_timestamps(
++    video: VideoFile, processed: bool
++) -> None:
++    video.raw_video_hash = "f" * 64
++    if not processed:
++        video.processed_file.name = ""
++        video.processed_video_hash = None
++    video.save()
++    Frame.objects.bulk_create(
++        [Frame(video=video, frame_number=index) for index in range(4)]
++    )
++    identities = list(
++        video.frames.order_by("frame_number").values_list("pk", flat=True)
++    )
++    service.backfill_missing_video_timestamps(video)
++    assert (
++        list(video.frames.order_by("frame_number").values_list("pk", flat=True))
++        == identities
++    )
++    assert load_video_timeline_index(video).frame_number_to_seconds(1) == (
++        4.15 if processed else 2.15
++    )
++    payload = VideoFileMetaPayload.model_validate(video.meta)
++    assert payload.source_timeline is not None
++    kind = "processed" if processed else "raw"
++    assert payload.source_timeline.artifact_kind == kind
++    assert payload.source_timeline.content_hash == (
++        video.processed_video_hash if processed else video.raw_video_hash
++    )
++    assert video.raw_video_hash == "f" * 64
++    assert {
++        entry.artifact_kind for entry in payload.canonical_timeline_history or []
++    } == {kind}
++    if processed:
++        with pytest.raises(ValueError, match="unambiguous canonical timestamp"):
++            artifact_frame_timestamps(video, file_type="raw")
++
++
+ def test_partial_timestamps_are_not_overwritten(
+     video: VideoFile, monkeypatch: pytest.MonkeyPatch
+ ) -> None:
+@@ -178,12 +208,61 @@ def test_partial_timestamps_are_not_overwritten(
+     probe.assert_not_called()
+ 
+ 
++@pytest.mark.parametrize("numbers", [[0, 1], [0, 1, 2, 3, 4, 5], [0, 1, 2, 4]])
++def test_decoded_pts_reconciles_unannotated_legacy_frame_count(
++    video: VideoFile, numbers: list[int]
++) -> None:
++    Frame.objects.bulk_create([Frame(video=video, frame_number=i) for i in numbers])
++    kept = dict(
++        video.frames.filter(frame_number__lt=4).values_list("frame_number", "pk")
++    )
++    service.backfill_missing_video_timestamps(video)
++    assert video.frame_count == 4
++    assert list(
++        video.frames.order_by("frame_number").values_list("timestamp", flat=True)
++    ) == [4, 4.15, 4.4, 4.75]
++    assert all(video.frames.get(frame_number=n).pk == pk for n, pk in kept.items())
++
++
++def test_count_reconciliation_preserves_annotated_coordinates(video: VideoFile) -> None:
++    Frame.objects.create(video=video, frame_number=0, is_extracted=True)
++    with pytest.raises(service.VideoTimelineMappingError, match="timestamp remapping"):
++        service.backfill_missing_video_timestamps(video)
++    assert video.frames.count() == 1
++    assert video.frames.get().timestamp is None
++
++
++def test_timestamp_only_recovery_still_rejects_tampered_ciphertext(
++    video: VideoFile,
++) -> None:
++    from endoreg_db.utils.file_operations import atomic_write_file
++    from endoreg_db.utils.paths import get_runtime_paths
++
++    path = Path(video.processed_file.path)
++    ciphertext = path.read_bytes()
++    atomic_write_file(
++        destination=path,
++        content=(ciphertext[:-1] + bytes([ciphertext[-1] ^ 1]),),
++        file_mode=0o600,
++    )
++    temporary_before = set(get_runtime_paths().transcoding.iterdir())
++    with pytest.raises(Exception):
++        service.backfill_missing_video_timestamps(video)
++    video.refresh_from_db()
++    assert not video.frames.exists()
++    assert not (video.meta or {}).get("source_timeline")
++    assert set(get_runtime_paths().transcoding.iterdir()) == temporary_before
++
++
+ @pytest.mark.parametrize("entrypoint", ["decoder", "download"])
+ @pytest.mark.parametrize("raw_history", [False, True])
+ def test_missing_timestamps_recover_at_read_entrypoints(
+     video: VideoFile, entrypoint: str, raw_history: bool
+ ) -> None:
+     if raw_history:
++        processed_name = video.processed_file.name
++        video.processed_file.name = ""
++        video.save(update_fields=["processed_file"])
+         load_video_timeline_index(video)
+         payload = VideoFileMetaPayload.model_validate(video.meta)
+         video.meta = {
+@@ -193,14 +272,19 @@ def test_missing_timestamps_recover_at_read_entrypoints(
+                 if entry.artifact_kind == "raw"
+             ]
+         }
+-        video.save(update_fields=["meta"])
++        video.processed_file.name = processed_name
++        video.save(update_fields=["meta", "processed_file"])
+         video.frames.all().delete()
+     if entrypoint == "decoder":
+         assert artifact_frame_timestamps(video, file_type="processed")[0] == 4.0
+     else:
+         assert len(list(timestamp_csv(video, original=False))) == 5
+     assert video.frames.count() == 4
+-    assert len(list(timestamp_csv(video, original=True))) == 5
++    if raw_history:
++        assert len(list(timestamp_csv(video, original=True))) == 5
++    else:
++        with pytest.raises(ValueError, match="Zeitstempelfolge"):
++            list(timestamp_csv(video, original=True))
+ 
+ 
+ def test_stale_reader_reuses_completed_backfill(
+@@ -285,5 +369,5 @@ def test_concurrent_readers_capture_each_generation_once(
+         first = executor.submit(resolve)
+         second = executor.submit(resolve)
+         assert first.result(timeout=30) == second.result(timeout=30) == 4.15
+-    assert probe.call_count == 2
++    assert probe.call_count == 1
+     assert video.frames.count() == 4
+diff --git a/tests/structure.yml b/tests/structure.yml
+index c2139141..72d0f18b 100644
+--- a/tests/structure.yml
++++ b/tests/structure.yml
+@@ -14,6 +14,8 @@ files:
+   role: Full video deletion removes owned assets synchronously, retains ownership on failure and rejects shared or aliased paths.
+ - file: services/test_video_timestamp_backfill.py
+   role: Automatic canonical timestamp backfill, identity preservation, idempotence and rejection regressions.
++- file: management/commands/test_backfill_video_timelines.py
++  role: Timeline backfill command dry-run, apply, idempotence, blocked-media reporting and hash-mismatch rejection.
+ - file: helpers/pdf.py
+   role: Independent single-page synthetic PDF fixture/reference shared by report tests and native-renderer parity; no clinical renderer fallback.
+ - file: services/test_shared_video_helpers.py
+diff --git a/uv.lock b/uv.lock
+index 549b7854..61749145 100644
+--- a/uv.lock
++++ b/uv.lock
+@@ -773,7 +773,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/62/59/e47bbd0542d0e6f4c
+ 
+ [[package]]
+ name = "endoreg-db"
+-version = "1.8.0"
++version = "1.8.2+luxnix.1"
+ source = { editable = "." }
+ dependencies = [
+     { name = "celery", extra = ["redis"] },

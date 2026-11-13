@@ -1,0 +1,99 @@
+version: 1
+tier: domain
+path: docs
+parent: ../structure.yml
+summary: Maintained architecture, contributor guidance, and operator runbooks.
+responsibilities:
+- Document ownership and operational risks
+- Maintain navigation through mkdocs.yaml and regenerate the derived table of contents
+boundaries:
+- Do not create parallel readiness trackers
+- Do not include secrets or local host facts in guides
+entrypoints:
+- name: migration-environment
+  file: migration-environment.md
+  purpose: Signed or console-confirmed one-shot RAM migration workflow, identity verification and remaining recovery prerequisites.
+- name: credential-backup
+  file: credential-backup.md
+  purpose: Preserve admin/client credential sources in encrypted archives and renew recovery evidence after drift.
+- name: boot-storage-map
+  file: boot-storage-map.md
+  purpose: Overview of encrypted root storage workflows, disk states, lifecycle, activation guard, recovery paths and file locations.
+- name: boot-storage-quickstart
+  file: boot-storage-quickstart.md
+  purpose: Separate fresh installation, existing encrypted-storage inspection and preservation migration operator workflows.
+- name: gc10-boot-applicability
+  file: guides/gc-10-boot-applicability.md
+  purpose: Historical read-only gc-10 boot staging assessment against live storage, generation and activation evidence.
+- name: gc02-boot-repair
+  file: guides/gc-02-boot-repair.md
+  purpose: Historical evidence, credential flow and operator acceptance/recovery for the recovered gc-02 generation.
+- name: operator-change-notes
+  file: changelog.md
+  purpose: Operator actions for storage workflow updates, existing installations and interrupted migrations.
+- name: lx-annotate-remote-tunnel
+  file: lx-annotate-remote-tunnel.md
+  purpose: Operator workflow and sshd contract for annotating and starting hub exports on another host through the scoped SSH tunnel.
+- name: remote-unlock-laptop
+  file: remote-unlock-laptop.md
+  purpose: Step-by-step early-boot SSH root unlock setup, attended first test and troubleshooting for a laptop.
+- name: boot-storage-recovery
+  file: boot-storage-recovery.md
+  purpose: Identify a root disk's state, select a matching generation, resume interrupted encryption and resolve preflight refusals.
+- name: boot-storage-migration
+  file: boot-storage-migration.md
+  purpose: Explicit preservation migration, recovery and physical acceptance for boot-time LUKS2 storage.
+- name: root-integrity-prototype
+  file: root-integrity-prototype.md
+  purpose: Verified-store research prototype, production trust-path map and remaining authentication gaps.
+- name: openbao
+  file: openbao.md
+  purpose: Isolated hub backend, client compatibility and staged Vault migration gates.
+- name: hub-secret-delivery
+  file: hub-secret-delivery.md
+  purpose: Publish shared and per-host secrets on the hub, token-based host fetch, outage behaviour and the backend switch.
+- name: legacy-storage-recovery
+  file: legacy-storage-recovery.md
+  purpose: Operating and recovering unmigrated gc-09, gc-10 and gs-02 legacy storage until boot-LUKS acceptance.
+- name: sops-application-secrets
+  file: sops-application-secrets.md
+  purpose: Production setup path for moving host-export application secrets to sops-nix with a per-host age key on operator storage.
+- name: secure-boot
+  file: secure-boot.md
+  purpose: Fleet Secure Boot with a controller-held key; custody, per-generation signing, host import and firmware enrollment.
+- name: package-management
+  file: package-management.md
+  purpose: Canonical package ownership and installation workflow.
+- name: machine-secrets-checklist
+  file: machine-secrets-checklist.md
+  purpose: Machine provisioning inputs, secret lifecycle ownership, and acceptance gates.
+- name: secret-rotation
+  file: secret-rotation.md
+  purpose: Canonical catalog usage and application/credential ownership boundaries.
+- name: center-identity-salt-activation
+  file: center-identity-salt-activation.md
+  purpose: Operator runbook for shared center identity salt activation, recovery and hub continuity.
+- name: documentation-home
+  file: index.md
+  purpose: Inspect documentation home ownership and interfaces.
+- name: architecture
+  file: architecture.md
+  purpose: Inspect architecture ownership and interfaces.
+- name: context-protocol
+  file: agent_context.md
+  purpose: Inspect context protocol ownership and interfaces.
+dependencies:
+  internal:
+  - feature-tracking
+  external:
+  - MkDocs
+  - Markdown
+submodules: []
+contracts:
+- name: documentation
+  doc: documentation.md
+- name: agent_context
+  doc: agent_context.md
+tests:
+  directory: ../tests
+  command: python -m pytest -q tests/test_documentation_contract.py

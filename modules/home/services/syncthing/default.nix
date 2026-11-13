@@ -4,9 +4,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.services.luxnix.syncthing;
-in {
+in
+{
   options.services.luxnix.syncthing = {
     enable = mkBoolOpt false "Enable syncthing service";
 
@@ -16,16 +18,16 @@ in {
 
     extraFlags = mkOption {
       type = types.listOf types.str;
-      default = ["--gui-address=127.0.0.1:8384"];
+      default = [ "--gui-address=127.0.0.1:8384" ];
       description = "Extra options to pass to syncthing";
     };
   };
 
   config = mkIf cfg.enable {
     services.syncthing = {
-      enable = false; #TODO REACTIVATE LATER
+      enable = false; # TODO REACTIVATE LATER
       tray.enable = true;
-      extraOptions = ["--gui-address=127.0.0.1:8384"];
+      extraOptions = [ "--gui-address=127.0.0.1:8384" ];
     };
   };
 }

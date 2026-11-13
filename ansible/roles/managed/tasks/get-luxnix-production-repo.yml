@@ -1,7 +1,7 @@
 - name: Read admin password
   ansible.builtin.slurp:
     src: "{{ lx_vault_dir }}/{{ admin_password_filename }}"
-  register: user_password
+  register: managed_user_password
   no_log: true
   vars:
     ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
@@ -13,7 +13,7 @@
     version: "{{ luxnix_branch }}"
     update: true
     force: false
-  register: git_update
+  register: managed_git_update
   no_log: true
   notify:
     - Run nho
