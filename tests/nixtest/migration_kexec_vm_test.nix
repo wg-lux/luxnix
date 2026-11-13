@@ -1,6 +1,7 @@
-# migration-boot kexec on a running host: no reboot, no firmware, no console. The
-# target switches into the RAM environment; the controller reaches it only with the
-# SSH host key pinned before the switch. Disposable VMs and synthetic keys only.
+# migration-boot kexec on a running host: no reboot and no firmware. The target
+# switches into the RAM environment; the controller reaches it only with the SSH
+# host key pinned before the switch, and its screen offers a root terminal after a
+# typed phrase. Disposable VMs and synthetic keys only.
 {
   pkgs,
   repoRoot,
@@ -74,6 +75,7 @@ let
 in
 pkgs.testers.runNixOSTest {
   name = "migration-kexec";
+  enableOCR = true;
   nodes = {
     controller = {
       environment.systemPackages = [ pkgs.openssh ];
@@ -147,12 +149,39 @@ pkgs.testers.runNixOSTest {
         controller.succeed(ssh + "test -x /run/current-system/sw/bin/luxnix-migration")
         assert controller.succeed(ssh + "ip -brief link show eth1").startswith("eth1")
 
-    with subtest("The screen shows how to connect instead of a login"):
+    with subtest("The screen shows how to connect"):
         controller.succeed(ssh + "systemctl is-active luxnix-migration-access.service")
         controller.fail(ssh + "systemctl is-active getty@tty1.service")
         # The screen is the last console, so boot status and messages reach it.
         cmdline = controller.succeed(ssh + "cat /proc/cmdline")
         assert cmdline.index("console=ttyS0") < cmdline.index("console=tty0"), cmdline
+        # Verify actual pixels: an active unit and a working serial console do
+        # not establish that the physical-style display is visible after kexec.
+        target.wait_for_text("(?i)migration environment", timeout=90)
+        target.screenshot("migration-kexec-visible-console")
+
+    with subtest("The screen opens a root terminal only after the typed phrase"):
+        # Keys go through the emulated US keyboard while the RAM environment uses
+        # the fleet's German layout: there "&" is typed for "/".
+        def typed(command):
+            assert not set("yz-") & set(command), command
+            target.send_chars(command.replace("/", "&") + "\n")
+
+        typed("touch /run/before")
+        target.wait_for_text("(?i)not opened", timeout=90)
+        controller.fail(ssh + "test -e /run/before")
+        typed("LOCAL TERMINAL")
+        target.wait_for_text("(?i)root terminal in ram", timeout=90)
+        typed("touch /run/opened")
+        controller.wait_until_succeeds(ssh + "test -e /run/opened", timeout=60)
+        target.screenshot("migration-kexec-local-terminal")
+        # Leaving the terminal brings the access screen back, closed again.
+        typed("exit")
+        controller.wait_until_succeeds(ssh + "'systemctl show -P NRestarts luxnix-migration-access.service | grep -x 1'", timeout=60)
+        target.wait_for_text("(?i)for a root terminal", timeout=90)
+        typed("touch /run/after")
+        target.wait_for_text("(?i)not opened", timeout=90)
+        controller.fail(ssh + "test -e /run/after")
 
     with subtest("Any other host key is refused"):
         controller.succeed("ssh-keygen -q -t ed25519 -N ''' -f /root/other")

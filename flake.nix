@@ -317,6 +317,12 @@
           repoRoot = ./.;
           remoteUnlockTest = true;
         };
+        boot-storage-usb-key = import ./tests/nixtest/boot_storage_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          inherit (inputs) disko;
+          repoRoot = ./.;
+          usbKeyTest = true;
+        };
         boot-storage-deferred = import ./tests/nixtest/boot_storage_vm_test.nix {
           pkgs = inputs.nixpkgs.legacyPackages.${system};
           inherit (inputs) disko;

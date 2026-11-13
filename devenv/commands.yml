@@ -299,10 +299,16 @@ commands:
     summary: Fresh encrypted installation by default; preservation requires an explicit command.
     risk: destructive-local
     operator_confirmation_required: true
-    usage: devenv shell luxnix [--profile <file.yml>] | [install|inspect|prepare|migrate|status|verify|recover|retire-containers|storage] [options]
+    usage: devenv shell luxnix [--profile <file.yml>] | [install|inspect|prepare|migrate|status|verify|recover|retire-containers|storage|ram] [options]
     implementation: lx_administration/cli.py
     documentation: docs/boot-storage-quickstart.md
+    ram_prepare: devenv shell luxnix ram push <host> [--settings <settings.yml>]
+    ram_start: devenv shell luxnix ram [<host>] [--apply]
+    ram_implementation: lx_administration/storage/ram_boot.py
     effects:
+      - ram push sends the operator helper and settings and builds under normal target Nix trust; it never starts RAM or changes boot entries.
+      - ram checks the prepared host, revision, helper and artifact hashes and invokes the existing kexec wrapper; only --apply with typed confirmation loads it.
+      - RAM preparation requires pinned SSH, reviewed settings and a clean target checkout matching the controller's selected Git HEAD; copy the fresh SSH pin before confirmation.
       - No arguments show fresh-install guidance; --profile builds a pinned installer without changing disks.
       - status reads an explicit preservation journal without replacing or creating a plan.
       - inspect <host> verifies actual encrypted mounts and credentials without creating workflow state.
@@ -755,6 +761,20 @@ native_commands:
       - Verifies the mounted root is the configured encrypted device, then creates /etc/luxnix/initrd-ssh/ssh_host_ed25519_key only when it is missing; an existing identity is never replaced.
       - Prints the public key as a known_hosts line to pin on operator computers and jump hosts; prints no private material.
       - Does not enable remote unlock, change the initrd, open storage or touch LUKS keyslots.
+
+  - id: setup-usb-unlock
+    summary: Enroll a key file on an existing USB stick as an additional root keyslot for unattended unlock.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: sudo luxnix-setup-usb-unlock <USB partition>
+    execution_context: Run interactively on the installed boot-LUKS host with the stick inserted, before installing the generation that enables usbKeyUnlock.
+    implementation: lx_administration/storage/boot_password.py
+    documentation: docs/boot-storage-migration.md
+    effects:
+      - Accepts only a USB partition with an existing ext4 or vfat filesystem; never formats and never writes outside the configured key path.
+      - Prompts for the existing disk passphrase, backs up the LUKS header, adds the key as a new keyslot and tests both credentials; no keyslot is removed.
+      - Reuses an existing key file unchanged, updates the boot-password receipt for the changed header and prints the inventory values.
+      - The stick becomes a bearer credential for this disk; store and transport it accordingly.
 
   - id: rebuild-host-switch
     summary: Persist and activate the reviewed configuration using native NixOS switching.

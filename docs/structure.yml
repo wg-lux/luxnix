@@ -31,6 +31,9 @@ entrypoints:
 - name: operator-change-notes
   file: changelog.md
   purpose: Operator actions for storage workflow updates, existing installations and interrupted migrations.
+- name: remote-unlock-laptop
+  file: remote-unlock-laptop.md
+  purpose: Step-by-step early-boot SSH root unlock setup, attended first test and troubleshooting for a laptop.
 - name: boot-storage-recovery
   file: boot-storage-recovery.md
   purpose: Identify a root disk's state, select a matching generation, resume interrupted encryption and resolve preflight refusals.

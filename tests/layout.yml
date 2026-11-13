@@ -42,7 +42,7 @@ nix_suites:
     command: nix build .#checks.x86_64-linux.root-guard --no-link -L
   - id: migration-kexec
     path: tests/nixtest/migration_kexec_vm_test.nix
-    scope: A running host starts the RAM environment through kexec without a reboot; SSH accepts only the pinned host key from the controller address.
+    scope: A running host switches into RAM through kexec; pinned SSH and OCR of the visible console banner must both pass, and the screen opens a root terminal only after the typed phrase.
     command: nix build .#checks.x86_64-linux.migration-kexec --no-link -L
   - id: boot-default-hold
     path: tests/nixtest/boot_default_hold_vm_test.nix

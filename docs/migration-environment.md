@@ -147,8 +147,15 @@ There are two ways to start the RAM environment:
 | Use when | You work from the controller | You are at the target's screen, or kexec is blocked |
 | How it starts | From the running host, without a reboot ([remote start](#start-without-a-reboot-remote)) | Reboot; the firmware takes the one-shot entry ([stage it first](#4-stage-then-arm)) |
 | The screen shows | Boot messages, then an access screen with the address and SSH fingerprint | Boot messages, then the approval prompt |
-| At the machine | No login; the screen only shows how to connect | Type `BOOT UNVERIFIED <host> <revision-prefix>`; a root shell opens on the screen |
+| At the machine | The access screen stays up; type `LOCAL TERMINAL` and press Enter for a root shell on the screen, `exit` returns to the access screen | Type `BOOT UNVERIFIED <host> <revision-prefix>`; a root shell opens on the screen |
 | Over SSH | Port 2222 with the `known_hosts` file the `--apply` run wrote before switching | Port 2222 after approval, when administrator keys are configured; check the fingerprint shown on the screen |
+
+Either way an operator at the machine can work in a terminal on its screen, also
+when the network or SSH fails during a conversion. The RAM environment holds no
+account passwords, so the typed phrase only prevents accidental input: anyone at
+the machine can open this root shell. Keep the machine attended or in a locked
+room while the RAM environment runs. The screen uses the German console layout
+of the fleet; both phrases type the same on a US keyboard.
 
 Connect from the controller (an address in `controller_cidr`) with:
 
@@ -321,6 +328,76 @@ reports the new default.
 Keep recovery material until cold boot, unlock, administrator login and
 LX-Annotate data access all pass. After conversion, the old generation stays in the
 menu but only the encrypted generation boots.
+
+## Attended RAM boot and display acceptance
+
+Test the RAM environment on the selected running host before using it for storage
+work. Keep the controller on a different running computer and an operator at the
+target's physical screen. A kexec switch stops the current system and disconnects
+its SSH sessions; it does not test the installed generation's firmware boot or
+root-unlock path.
+
+Before `--apply`, verify the exact host and immutable bundle, the wired interface
+and source address, and that the controller's SSH identity is allowed by the
+bundle. Copy and pin the newly generated `known_hosts` file while the command
+waits for the typed phrase. Verify the existing disk passphrase privately so the
+operator can recover the unchanged installed system if RAM networking or display
+fails. No migration or encryption command is part of this boot-only test.
+
+After the switch, require both observations:
+
+- The physical screen shows the **LuxNix migration environment** banner with the
+  selected host, management address and host-key fingerprint. A working SSH
+  connection does not prove that the display is visible.
+- The controller reconnects with strict host-key checking and verifies the
+  expected `-migration` hostname, `tmpfs` root, admitted RAM environment and
+  unchanged target storage. Do not mount target filesystems or run migration.
+
+Record screen visibility separately from network access. If the display stays
+black, record the test as failed even if SSH works; inspect DRM/framebuffer and
+console logs through that verified SSH connection. If networking fails as well,
+the console operator can restart into the unchanged installed system and enter
+its disk passphrase. Never reboot both the target and its only jump/controller
+host together.
+
+The `migration-kexec` VM check switches from its running system into RAM, asserts
+readable screen text through OCR and saves `migration-kexec-visible-console.png`.
+This catches a blank emulated screen; actual GPU, monitor and cable behaviour
+still requires the physical observation above.
+
+## Prepare and start through luxnix
+
+Run these commands on the controller; no Nix store path needs to be copied or
+typed:
+
+```sh
+devenv shell luxnix ram push gc-09 --settings /path/to/reviewed-settings.yml
+devenv shell luxnix ram gc-09
+devenv shell luxnix ram gc-09 --apply
+```
+
+The first push saves the reviewed settings privately on the controller. Later
+pushes can use `luxnix ram push gc-09` without the settings argument. Settings use
+the existing migration-boot schema; they cannot select executable code. The
+host's durable checkout must be clean and match the controller's selected Git
+HEAD. Uncommitted controller edits are not packaged as a RAM release.
+
+Push sends the small operator helper and settings over host-key-checked SSH,
+then builds the RAM bundle on the host using its normal Nix trust rules. It does
+not import unsigned controller paths, relax signature checks, modify the host
+checkout, change boot entries or start RAM. Successful preparation saves private
+receipts binding the host, release revision and artifact hashes.
+
+The start command verifies those receipts and the pushed helper before invoking
+the existing `migration-boot kexec` workflow in an interactive SSH terminal.
+Without `--apply` it is a preview. With `--apply`, sudo and the `START RAM` phrase
+remain mandatory. Enter passwords only in the terminal. While the command waits
+at that phrase, copy its freshly generated `known_hosts` file to the controller
+and pin it **before** confirming. Every run creates a different identity: do not
+start a second copy while the first one waits.
+
+Once the same CLI is available locally on a prepared target, `luxnix ram --apply`
+uses that target's saved receipt. No command here authorizes storage migration.
 
 ## Start without a reboot (remote)
 

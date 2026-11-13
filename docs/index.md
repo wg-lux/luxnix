@@ -8,6 +8,7 @@ Choose the task below; you do not need to read every guide.
 | Use a machine while an upgrade is planned | Ask your operator for the maintenance window and when work can resume. You do not need to run migration commands. |
 | Install a machine for the first time | [Operator checklist](boot-storage-quickstart.md): preparation, installation, login and recovery. |
 | Continue an interrupted installation | [Resume instructions](changelog.md#continue-an-installation-or-migration): retain the existing plan and inspect its status. |
+| Unlock a laptop's encrypted root over SSH after a reboot | [Laptop remote unlock](remote-unlock-laptop.md): requirements, inventory values and the attended first test. |
 | Update an existing machine | [Change notes](changelog.md): choose the instructions for its current storage state. |
 | Review the technical safeguards | [Migration reference](boot-storage-migration.md): evidence, commands and acceptance requirements. |
 | Develop or maintain LuxNix | [Development](development.md) and [architecture](architecture.md). |

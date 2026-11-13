@@ -10,6 +10,9 @@ boundaries:
   - Do not mount or alter live storage during context validation
   - Preserve encrypted storage and hub authentication boundaries
 entrypoints:
+  - name: ram-command
+    file: ram_boot.py
+    purpose: Push a verified operator helper and settings, build the host-bound RAM bundle under normal target Nix trust, and start through the existing typed kexec workflow without manually entered store paths.
   - name: fresh-install
     file: fresh_install.py
     purpose: Build an immutable single or multidisk fresh installer, admit explicit disk erasure, resume verified installation without formatting and inspect existing encrypted storage without migration state.
@@ -39,7 +42,7 @@ entrypoints:
     purpose: Privately prompt and disclose verified disk credentials once until acknowledged, with receipts bound to encrypted vault records.
   - name: boot-password-setup
     file: boot_password.py
-    purpose: Prompt for root passphrase setup or changes, preserve recovery slots, and bind verification receipts to host and LUKS header before activation.
+    purpose: Prompt for root passphrase setup or changes, enroll an additional key file on removable media, preserve recovery slots, and bind verification receipts to host and LUKS header before activation.
   - name: recovery-export
     file: recovery_export.py
     purpose: Share explicit optimized-Python-safe validation and private publication of encrypted recovery records.

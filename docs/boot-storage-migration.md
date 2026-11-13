@@ -501,7 +501,9 @@ never establishes physical reboot acceptance.
 #### Enabling it on an already encrypted host
 
 `prepare-access` only runs inside a migration. On a host that is already
-encrypted, including one converted earlier with console unlock:
+encrypted, including one converted earlier with console unlock, follow the
+steps below. For a laptop (USB adapters, docks, changing networks) use the
+detailed [laptop remote unlock guide](remote-unlock-laptop.md).
 
 1. Deploy a generation that contains `luxnix-setup-remote-unlock` (every
    boot-LUKS generation built from this release) and run
@@ -510,9 +512,12 @@ encrypted, including one converted earlier with console unlock:
    `known_hosts` line. Rerunning it keeps the identity and prints the line again.
 2. Record the management inputs in the inventory. In shared variables give the
    host and every allowed client an `ip_local` and the same `network_cluster`
-   under `generic_settings.network.hosts`; in the host YAML set
-   `storage.operatorUnlocked.remoteUnlock` (`enable`, `interface`,
-   `kernelModules`, `address`, optional `gateway`, `authorizedKeys`). Read the
+   under `generic_settings.network.hosts`. In the host YAML name the allowed
+   clients in `networkAccess.operatorHosts` (followers also accept
+   `networkAccess.leaderHosts`); only those in the same cluster become allowed
+   sources. Then set `storage.operatorUnlocked.remoteUnlock` (`enable`,
+   `interface`, `kernelModules`, `address`, optional `gateway`,
+   `authorizedKeys`). Read the
    interface and driver on the host:
    `basename "$(readlink /sys/class/net/<interface>/device/driver)"`. Reserve the
    static address outside the DHCP pool, or reserve the lease for it.
@@ -539,6 +544,41 @@ only. The current controller-signed Secure Boot policy requires an empty
 method. Hosts using that policy need a compatible signing and initrd identity
 provisioning design before enabling remote unlock; keep Secure Boot as configured.
 Fresh installation uses console unlock by default.
+
+### USB key unlock (experimental)
+
+Where no wired management network can be guaranteed, a host can unlock root from
+a key file on a USB stick. With the enrolled stick inserted at boot, root opens
+without input. Without it, or when its key is rejected, boot waits
+`timeoutSeconds` (15 by default) and then shows the usual passphrase prompt. The
+passphrase stays valid; the stick is one more keyslot.
+
+**The stick is a bearer credential.** Whoever holds the stick and the machine
+reads the disk, and the key file is not protected by a password. A stick left
+in an unattended machine means theft of that machine exposes its data. Choose
+per host whether reachability after a reboot is worth that, keep the stick
+elsewhere whenever someone can insert it on request, and never store the disk
+passphrase on it.
+
+1. On the running host, insert a stick with an existing ext4 or vfat filesystem
+   and run `sudo luxnix-setup-usb-unlock /dev/<partition>` (find it with
+   `lsblk -o NAME,TRAN,FSTYPE,SIZE`). It asks for the disk passphrase, backs up
+   the LUKS header, writes `luxnix/<host>.luks-key` to the stick, adds it as a
+   keyslot and tests both credentials. Nothing is formatted; an existing key
+   file is reused unchanged, so the command is safe to repeat.
+2. Put the printed values under `host_luxnix` in the host YAML
+   (`storage.operatorUnlocked.usbKeyUnlock.enable`, `.filesystemUuid`,
+   `.fsType`), regenerate, build and install with `boot`.
+3. With someone at the console, test all three cases before relying on it:
+   reboot with the stick (no prompt), reboot without it (prompt after the wait,
+   passphrase works), and select the previous generation from the boot menu.
+
+One stick can hold key files for several hosts; each host only reads its own
+file. To revoke a lost stick, find its slot with
+`sudo cryptsetup luksDump <root device>`, remove it with
+`sudo cryptsetup luksKillSlot <root device> <slot>` and the passphrase, then run
+`sudo luxnix-setup-boot-password` so rebuilds accept the changed header. Any
+other key file or token option on root remains refused at evaluation.
 
 ### Readiness observations versus admission
 

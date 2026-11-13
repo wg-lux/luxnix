@@ -9,6 +9,9 @@
 let
   cfg = config.luxnix.storage.operatorUnlocked;
   remote = cfg.remoteUnlock;
+  usb = cfg.usbKeyUnlock;
+  # systemd's crypttab syntax: key file path on the filesystem with this UUID.
+  usbKeyFile = "/${usb.keyPath}:UUID=${usb.filesystemUuid}";
   access = (import ../../../../lib/network-access { inherit lib; }).networkAccess;
   unlockCommand = pkgs.writeShellScript "luxnix-root-unlock" ''
     echo 'Enter the disk recovery passphrase. This connection cannot run other commands.'
@@ -64,6 +67,12 @@ let
       # Consume NixOS's crypttab, preserving its complete unlock options.
       while read -r name device key opts; do
         [ "$name" = cryptroot ] || continue
+        # The crypttab generator mounts a key device here; this unit replaces
+        # only its attach command, so resolve the path the same way. A stick
+        # that is absent or rejected falls back to the passphrase prompt.
+        case "$key" in
+          *:*) key="/run/systemd/cryptsetup/keydev-$name/''${key%%:*}" ;;
+        esac
         if cryptsetup isLuks --type luks2 "$device"; then
           # Failed unlock must never fall through to plaintext handling.
           exec systemd-cryptsetup attach "$name" "$device" "$key" "$opts"
@@ -274,6 +283,47 @@ let
           echo 'Remote unlock is not enabled in this generation; enable it in the host inventory next.'
         ''}
       '';
+  # Shipped on every boot-LUKS host so the stick is enrolled before the first
+  # generation that waits for it.
+  setupUsbUnlock =
+    storageCommand "luxnix-setup-usb-unlock"
+      [
+        pkgs.btrfs-progs
+        pkgs.coreutils
+        pkgs.cryptsetup
+      ]
+      ''
+        if [ "$#" -ne 1 ]; then
+          echo 'Usage: sudo luxnix-setup-usb-unlock <USB partition, e.g. /dev/sdb1>' >&2; exit 2
+        fi
+        if [ "$EUID" -ne 0 ]; then echo 'Run with sudo.' >&2; exit 1; fi
+        partition=$(readlink -f "$1")
+        if [ ! -b "$partition" ]; then echo "$1 is not a block device." >&2; exit 1; fi
+        parent=$(lsblk -no PKNAME "$partition" | head -n 1)
+        disk="/dev/''${parent:-$(basename "$partition")}"
+        if [ "$(lsblk -dno TRAN "$disk")" != usb ]; then
+          echo "$disk is not a USB device; the key belongs on removable media only." >&2; exit 1
+        fi
+        filesystem=$(blkid -p -o value -s TYPE "$partition")
+        case "$filesystem" in
+          ext4|vfat) ;;
+          *) echo "Unsupported filesystem '$filesystem'; use an existing ext4 or vfat stick. Nothing is formatted." >&2; exit 1 ;;
+        esac
+        uuid=$(blkid -p -o value -s UUID "$partition")
+        directory=$(mktemp -d /run/luxnix-usb-key.XXXXXX)
+        mount -o nosuid,nodev,noexec "$partition" "$directory"
+        trap 'umount "$directory" && rmdir "$directory"' EXIT
+        key="$directory"/${lib.escapeShellArg usb.keyPath}
+        mkdir -p "$(dirname "$key")"
+        python3 ${checker}/boot_password.py \
+          --device ${lib.escapeShellArg config.boot.initrd.luks.devices.cryptroot.device} \
+          --enroll-key-file "$key"
+        sync
+        echo 'Anyone holding this stick can unlock this disk. Set in the host inventory:'
+        echo "  storage.operatorUnlocked.usbKeyUnlock.enable: \"true\""
+        echo "  storage.operatorUnlocked.usbKeyUnlock.filesystemUuid: '\"$uuid\"'"
+        echo "  storage.operatorUnlocked.usbKeyUnlock.fsType: '\"$filesystem\"'"
+      '';
   setupRoot = storageCommand "luxnix-setup-root-encryption" [ pkgs.btrfs-progs pkgs.cryptsetup ] ''
     usage() {
       echo 'Usage: luxnix-setup-root-encryption [--setup-password]'
@@ -357,6 +407,36 @@ in
       description = "Dedicated host identity copied into initrd; never use a login host key.";
     };
   };
+  options.luxnix.storage.operatorUnlocked.usbKeyUnlock = {
+    enable = lib.mkEnableOption ''
+      unlocking root from a key file on an enrolled USB stick. The stick is a
+      bearer credential: whoever holds it and the machine reads the disk. Without
+      the stick the passphrase prompt appears as before
+    '';
+    filesystemUuid = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "Filesystem UUID of the enrolled stick, printed by luxnix-setup-usb-unlock.";
+    };
+    fsType = lib.mkOption {
+      type = lib.types.enum [
+        "ext4"
+        "vfat"
+      ];
+      default = "vfat";
+      description = "Filesystem of the enrolled stick; its driver is added to the initrd.";
+    };
+    keyPath = lib.mkOption {
+      type = lib.types.str;
+      default = "luxnix/${config.networking.hostName}.luks-key";
+      description = "Key file path relative to the stick's filesystem; one file per host.";
+    };
+    timeoutSeconds = lib.mkOption {
+      type = lib.types.ints.between 5 120;
+      default = 15;
+      description = "How long boot waits for the stick before asking for the passphrase.";
+    };
+  };
   config = lib.mkIf enabled (
     lib.mkMerge [
       (lib.optionalAttrs (options ? roles.managed-secrets) {
@@ -423,7 +503,7 @@ in
           }
           {
             assertion =
-              config.boot.initrd.luks.devices.cryptroot.keyFile == null
+              config.boot.initrd.luks.devices.cryptroot.keyFile == (if usb.enable then usbKeyFile else null)
               && lib.all (
                 option:
                 !(lib.any (prefix: lib.hasPrefix prefix option) [
@@ -435,7 +515,7 @@ in
                   "headless"
                 ])
               ) config.boot.initrd.luks.devices.cryptroot.crypttabExtraOpts;
-            message = "Root unlock must prompt the operator; remove USB/key-file, token and unattended unlock options.";
+            message = "Root unlock must prompt the operator; remove key-file, token and unattended unlock options. The only exception is luxnix.storage.operatorUnlocked.usbKeyUnlock.";
           }
         ];
         # The passphrase prompt follows the storage layout on every rebuild.
@@ -523,6 +603,7 @@ in
           setupPassword
           setupRoot
           setupRemoteUnlock
+          setupUsbUnlock
           operatorStorage
         ];
         systemd.services = lib.mkMerge [
@@ -592,6 +673,33 @@ in
             "/".options = [ "x-systemd.device-timeout=0" ];
           };
       }
+      (lib.mkIf usb.enable {
+        assertions = [
+          {
+            assertion = builtins.match "[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}|[0-9a-f-]{36}" usb.filesystemUuid != null;
+            message = "USB key unlock needs the stick's filesystem UUID; run sudo luxnix-setup-usb-unlock <partition>.";
+          }
+          {
+            assertion =
+              builtins.match "[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*" usb.keyPath != null
+              && !(lib.any (part: part == ".." || part == ".") (lib.splitString "/" usb.keyPath));
+            message = "The USB key path must be a plain relative path on the stick.";
+          }
+        ];
+        boot.initrd = {
+          supportedFilesystems = [ usb.fsType ];
+          availableKernelModules = [
+            "usb_storage"
+            "uas"
+            "sd_mod"
+            "xhci_pci"
+          ];
+          luks.devices.cryptroot = {
+            keyFile = usbKeyFile;
+            keyFileTimeout = usb.timeoutSeconds;
+          };
+        };
+      })
       (lib.mkIf remote.enable {
         assertions = [
           {

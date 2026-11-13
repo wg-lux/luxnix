@@ -369,6 +369,42 @@ def test_every_exported_host_uses_password_login():
             warnings.warn(f"{name}: unrelated deployment assertions remain: {policy['failures']}")
 
 
+def test_usb_key_unlock_is_the_only_key_file_exception():
+    expression = r'''
+      let f = builtins.getFlake ("git+file://" + toString ./.);
+          lib = f.inputs.nixpkgs.lib;
+          failures = c: map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
+          h = f.nixosConfigurations.gc-09;
+          with_ = module: (h.extendModules { modules = [ module ]; }).config;
+          stick = with_ { luxnix.storage.operatorUnlocked.usbKeyUnlock = {
+            enable = true; filesystemUuid = "52D2-6858"; }; };
+      in {
+        crypttab = builtins.readFile stick.boot.initrd.systemd.contents."/etc/crypttab".source;
+        filesystems = stick.boot.initrd.supportedFilesystems.vfat or false;
+        enabled = failures stick;
+        unset = failures (with_ {
+          luxnix.storage.operatorUnlocked.usbKeyUnlock.enable = true; });
+        adhoc = failures (with_ {
+          boot.initrd.luks.devices.cryptroot.keyFile = "/key:UUID=52D2-6858"; });
+        helper = builtins.any (p: (p.name or "") == "luxnix-setup-usb-unlock")
+          h.config.environment.systemPackages;
+      }
+    '''
+    result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
+                            cwd=ROOT, capture_output=True, text=True, timeout=600)
+    assert result.returncode == 0, result.stderr
+    value = json.loads(result.stdout)
+    (line,) = [l for l in value["crypttab"].splitlines() if l.startswith("cryptroot ")]
+    _, _, key, options = line.split()
+    assert key == "/luxnix/gc-09.luks-key:UUID=52D2-6858"
+    # Without the stick the unlimited passphrase prompt still appears.
+    assert {"keyfile-timeout=15s", "timeout=0", "tries=0"} <= set(options.split(","))
+    assert value["filesystems"] and value["helper"]
+    assert not any("key" in m.lower() for m in value["enabled"])
+    assert any("filesystem UUID" in m for m in value["unset"])
+    assert any("usbKeyUnlock" in m for m in value["adhoc"])
+
+
 @pytest.mark.parametrize("missing", [False, True])
 @pytest.mark.parametrize("encrypted", [False, True])
 def test_every_btrfs_member_is_checked(tmp_path, monkeypatch, missing, encrypted):

@@ -12,6 +12,8 @@ Usage: luxnix [--profile <file.yml>] | <command> [options]
   inspect            Verify existing encrypted storage (HOST)
   install            Prepare a fresh encrypted installer (default; --profile <file.yml>)
   migrate            Encrypt root in place, step by step (resumes; safe to rerun)
+  ram push HOST      Prepare the RAM image on HOST without typing a store path
+  ram [HOST]         Preview RAM startup; --apply retains typed confirmation
   verify             Check the real disk against the plan (read-only; safe to repeat)
   recover            Show the recovery procedure for this disk (--partition <path>);
                      with --assessor, accept the layout after interrupted encryption
@@ -56,6 +58,11 @@ def main(argv: list[str] | None = None) -> None:
         return
     if command.startswith("-"):
         command, rest = "install", argv
+    if command == "ram":
+        from lx_administration.storage import ram_boot
+
+        ram_boot.main(rest)
+        return
     if command in {"install", "inspect"}:
         from lx_administration.storage import fresh_install
 

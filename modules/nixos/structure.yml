@@ -24,7 +24,7 @@ entrypoints:
   purpose: Restrict opt-in scheduled upgrades to reviewed immutable revisions staged for a separate operator reboot.
 - name: boot-storage
   file: luxnix/operator-unlocked-storage/boot.nix
-  purpose: LUKS2 root unlock with no plaintext fallback by default, explicit password setup, secondary crypttab, layout-aware operator start, opt-in initrd SSH unlock with a one-time host identity command, and strict encrypted storage checks.
+  purpose: LUKS2 root unlock with no plaintext fallback by default, explicit password setup, secondary crypttab, layout-aware operator start, opt-in initrd SSH unlock with a one-time host identity command, opt-in USB key-file unlock with passphrase fallback, and strict encrypted storage checks.
 - name: root-storage-guard
   file: luxnix/operator-unlocked-storage/root-guard.nix
   purpose: Publish each generation's root-storage contract and enforce the target-host preflight before activation.

@@ -7,9 +7,31 @@
   mdraidTest ? false,
   deferStartupTest ? false,
   plaintextRootTest ? false,
+  usbKeyTest ? false,
 }:
 let
   key = "/etc/luks-keys/lx-data.key";
+  # A third disposable disk stands in for the enrolled stick.
+  stickUuid = "5a1d0c2e-7b3f-4e9a-8c6d-1f2e3a4b5c6d";
+  stickKey = "luxnix/test.luks-key";
+  stickDisk = {
+    type = "disk";
+    device = "/dev/vdc";
+    content = {
+      type = "gpt";
+      partitions.key = {
+        size = "100%";
+        content = {
+          type = "filesystem";
+          format = "ext4";
+          extraArgs = [
+            "-U"
+            stickUuid
+          ];
+        };
+      };
+    };
+  };
   sshFixtures = pkgs.path + "/nixos/tests/initrd-network-ssh";
   dataLuks = {
     type = "luks";
@@ -91,7 +113,8 @@ let
           };
         };
       };
-    };
+    }
+    // pkgs.lib.optionalAttrs usbKeyTest { stick = stickDisk; };
     disko.devices.mdadm = pkgs.lib.optionalAttrs mdraidTest {
       application = {
         type = "mdadm";
@@ -113,6 +136,8 @@ disko.lib.testLib.makeDiskoTest {
       "boot-storage-deferred"
     else if remoteUnlockTest then
       "boot-storage-remote"
+    else if usbKeyTest then
+      "boot-storage-usb-key"
     else
       "boot-storage";
   disko-config = raw;
@@ -200,6 +225,13 @@ disko.lib.testLib.makeDiskoTest {
         autoStartProtectedServices = !deferStartupTest;
         startupServices = [ "writer" ];
         guardedServices.writer = if plaintextRootTest then [ "/home" ] else [ "/srv/data" ];
+        usbKeyUnlock = lib.mkIf usbKeyTest {
+          enable = true;
+          filesystemUuid = stickUuid;
+          fsType = "ext4";
+          keyPath = stickKey;
+          timeoutSeconds = 5;
+        };
         remoteUnlock = lib.mkIf remoteUnlockTest {
           enable = true;
           interface = "eth0";
@@ -264,13 +296,49 @@ disko.lib.testLib.makeDiskoTest {
             time.sleep(3)
             enter_passphrase("secretsecret")
       ''
+    else if usbKeyTest then
+      ''
+        import time
+        # The stick is present but holds no key yet: boot must fall back to the
+        # passphrase. The prompt itself has no line ending to wait for here.
+        machine.wait_for_console_text("Failed to activate, key file .* missing")
+        time.sleep(5)
+        machine.send_chars("secretsecret\n")
+      ''
     else
       ''
         machine.wait_for_console_text("Please enter passphrase")
         machine.send_chars("secretsecret\n")
       '';
   extraTestScript =
-    if plaintextRootTest then
+    if usbKeyTest then
+      ''
+        root = "/dev/disk/by-partlabel/disk-system-root"
+        stick = "/dev/disk/by-uuid/${stickUuid}"
+        # First boot: the stick held no key yet, so the passphrase was asked above.
+        machine.wait_for_unit("multi-user.target")
+        machine.succeed(f"mkdir /run/stick; mount {stick} /run/stick; mkdir /run/stick/luxnix")
+        machine.succeed("head -c 64 /dev/urandom > /run/stick/${stickKey}; printf secretsecret > /run/test-root-key")
+        machine.succeed(f"cryptsetup luksAddKey --batch-mode {root} /run/stick/${stickKey} --key-file /run/test-root-key")
+        machine.succeed("umount /run/stick")
+        machine.shutdown()
+        machine.start()
+        # The enrolled stick unlocks root; nobody types a passphrase.
+        machine.wait_for_unit("multi-user.target")
+        machine.succeed("findmnt -no SOURCE / | grep /dev/mapper/cryptroot")
+        machine.succeed("luxnix-verify-boot-storage")
+        machine.fail("findmnt /run/systemd/cryptsetup/keydev-cryptroot")
+        # A revoked stick no longer opens the disk; boot asks for the passphrase.
+        machine.succeed(f"mkdir /run/stick; mount {stick} /run/stick; cryptsetup luksRemoveKey --batch-mode {root} /run/stick/${stickKey}; umount /run/stick")
+        machine.shutdown()
+        machine.start()
+        machine.wait_for_console_text("Failed to activate with key file")
+        time.sleep(5)
+        machine.send_chars("secretsecret\n")
+        machine.wait_for_unit("multi-user.target")
+        machine.succeed("luxnix-verify-boot-storage")
+      ''
+    else if plaintextRootTest then
       ''
         for attempt in range(2):
             machine.wait_for_unit("multi-user.target")

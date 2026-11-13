@@ -109,8 +109,10 @@ let
             };
             generators.systemd-ssh-generator = lib.mkIf (!sshEnabled) "/dev/null";
             services = {
-              # A local shell is available only after physical approval in this image;
-              # a host-kexec image has none and shows how to connect instead.
+              # Both images open a root shell on the screen only after a typed phrase.
+              # The staged image asks during admission; a host-kexec image shows how to
+              # connect and opens its terminal on request. Presence at the machine is
+              # the credential: this image holds no account passwords.
               "getty@tty1".enable = lib.mkIf (localConsole || hostKexec) false;
               "autovt@tty1".enable = lib.mkIf (localConsole || hostKexec) false;
               "serial-getty@ttyS0".enable = lib.mkIf (localConsole || hostKexec) false;
@@ -124,14 +126,23 @@ let
                   pkgs.openssh
                   pkgs.systemd
                 ];
+                environment.HOME = "/root";
                 serviceConfig = {
-                  Type = "oneshot";
-                  RemainAfterExit = true;
+                  Type = "simple";
+                  StandardInput = "tty";
                   StandardOutput = "tty";
+                  StandardError = "tty";
                   TTYPath = "/dev/${console}";
                   TTYReset = true;
+                  TTYVHangup = true;
+                  WorkingDirectory = "/root";
+                  # Leaving the terminal returns to the access screen.
+                  Restart = "always";
+                  RestartSec = "1s";
                 };
                 script = ''
+                  # Typed identically on German and US keyboards.
+                  phrase="LOCAL TERMINAL"
                   clear || true
                   echo "LuxNix migration environment for ${spec.host}, started remotely"
                   echo
@@ -141,11 +152,19 @@ let
                     echo "Host key: $(ssh-keygen -lf ${kexecHostKey}.pub)"
                   else
                     echo "SSH is closed: this environment did not receive the host key"
-                    echo "pinned by migration-boot kexec. Power off and start again."
+                    echo "pinned by migration-boot kexec. Use the terminal on this screen."
                   fi
                   echo
-                  echo "There is no login on this screen. To work here instead, boot the"
-                  echo "staged LuxNix migration entry from the boot menu."
+                  echo "For a root terminal on this screen, type $phrase and press Enter."
+                  while true; do
+                    # A closed or hung-up terminal restarts this screen.
+                    IFS= read -r answer || exit 1
+                    if [ "$answer" = "$phrase" ]; then break; fi
+                    echo "Not opened. Type $phrase exactly."
+                  done
+                  echo "Root terminal in RAM; disks are unchanged until you run a migration step."
+                  echo "Leave with exit to return to the access screen."
+                  exec ${pkgs.bashInteractive}/bin/bash --login
                 '';
               };
               luxnix-migration-console = lib.mkIf localConsole {
@@ -238,6 +257,11 @@ let
           systemd.tmpfiles.rules = [ "d /recovery 0700 root root - -" ];
           swapDevices = lib.mkForce [ ];
           zramSwap.enable = lib.mkForce false;
+          # Kernel notices after boot must not scroll the access screen and its
+          # terminal away; errors still reach the screen.
+          boot.kernel.sysctl."kernel.printk" = lib.mkIf hostKexec "3 4 1 3";
+          # Every fleet host uses this console layout; SSH sessions are unaffected.
+          console.keyMap = "de";
           boot = {
             resumeDevice = lib.mkForce "";
             postBootCommands = lib.mkForce "";

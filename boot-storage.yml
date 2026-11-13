@@ -6,6 +6,7 @@ runbook: docs/boot-storage-quickstart.md
 historical_catalog: boot-encryption-acceptance.yml
 baseline:
   - One operator passphrase unlock for root; no TPM or central service required at boot.
+  - The passphrase always remains valid; an enrolled USB key is an optional additional keyslot, never a replacement.
   - Secondary keys remain on encrypted root, outside the initrd.
   - Protected services verify actual encrypted backing devices before writing.
   - Disk installation never rotates application keys or identities.
@@ -47,6 +48,7 @@ workflows:
     multidisk: Encrypt independent Btrfs partitions in place; preserve filesystem identities and source containers, with data keys on encrypted root.
     excludes: MD arrays and multi-member Btrfs conversion.
 remote_unlock:
+  laptop_guide: docs/remote-unlock-laptop.md
   scope: Opt-in per host; no deployed host has it enabled or physically accepted yet.
   locked_root: ssh -tt -p 2222 root@<early-boot address> reaches the dedicated initrd SSH endpoint, which only accepts the root passphrase.
   after_boot: sudo luxnix-operator-storage start opens secondary storage and starts guarded services in a normal SSH session. It needs a booted system and cannot unlock root.
@@ -77,11 +79,25 @@ remote_unlock:
         - Confirm a reachable management LAN, reserved static address, exact NIC and drivers, allowed source addresses and independently running jump host.
         - Provision and pin the dedicated initrd host identity; use explicit dedicated operator public keys and a signing-compatible reviewed release.
         - Build and inspect the exact candidate initrd, normal SSH access and storage contract before requesting approval for boot staging or reboot.
+      ram_boot_smoke_test:
+        - Start the host-bound kexec RAM bundle from the selected running host, with a separate controller and an operator at its physical screen.
+        - Pin the runtime host identity before the switch and verify the controller key is authorized; keep normal boot defaults and target storage unchanged.
+        - Require a visible migration banner on the physical display and a strictly verified SSH connection reporting the expected migration hostname and tmpfs root.
+        - Record a black screen as a failed display test even when SSH works; a RAM boot is not acceptance of the installed generation's root unlock.
       attended_boot:
         - Test one host at a time, keeping the operator or jump host running; record the candidate closure and boot entry before proceeding.
         - Unlock through strictly pinned initrd SSH while the console operator watches; use console recovery if that path fails.
         - After boot, reconnect through normal SSH and verify root, secondary storage, generation identity, administrator access and guarded services.
         - Record observed results and failures; physical acceptance remains pending until every required check passes on that host.
+usb_key_unlock:
+  status: Experimental opt-in per host; VM-tested only, no physical acceptance yet.
+  behavior: With the enrolled stick inserted at boot, root unlocks without input. Without it, or with a rejected key, the passphrase prompt appears after the wait.
+  enroll: sudo luxnix-setup-usb-unlock <USB partition> creates one random key file per host on an existing ext4 or vfat stick, adds it as an extra keyslot after the passphrase and prints the inventory values. Nothing is formatted and no slot is removed.
+  enable: Set storage.operatorUnlocked.usbKeyUnlock (enable, filesystemUuid, fsType) in the host inventory, regenerate and install with boot.
+  risk:
+    - The stick is a bearer credential; whoever holds it and the machine can read the disk.
+    - A stick left in an unattended machine removes the protection against theft of that machine; this trades confidentiality for reachability.
+    - Revoke a lost stick by removing its keyslot with the passphrase, then rerun sudo luxnix-setup-boot-password.
 verification:
   python: uv run pytest -q tests/test_fresh_install.py tests/test_luxnix_cli.py
   vm: nix build .#checks.x86_64-linux.boot-storage-fresh --no-link -L
@@ -89,4 +105,6 @@ verification:
     nix build .#checks.x86_64-linux.boot-storage-fresh-multidisk
     .#checks.x86_64-linux.boot-storage-in-place-multidisk --no-link -L
   remote_vm: nix build .#checks.x86_64-linux.boot-storage-remote --no-link -L
+  ram_display_vm: nix build .#checks.x86_64-linux.migration-kexec --no-link -L
+  usb_key_vm: nix build .#checks.x86_64-linux.boot-storage-usb-key --no-link -L
   qualification: Repository tests do not establish physical host acceptance.

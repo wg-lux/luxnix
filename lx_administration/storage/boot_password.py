@@ -26,6 +26,7 @@ else:
 
 STATE = Path("/var/lib/luxnix-boot-passphrase")
 MACHINE_ID = Path("/etc/machine-id")
+KEY_FILE_BYTES = 64
 
 
 def private(path: Path, *, directory: bool = False) -> None:
@@ -167,7 +168,9 @@ def add_password(device: str, password: bytes, previous: bytes, state: Path) -> 
         raise ValueError("Recovery credential verification failed; do not reboot")
 
 
-def prepare(device: str, *, change: bool = False) -> None:
+@contextmanager
+def session(device: str):
+    """Verified encrypted root, exclusive state lock and the current header identity."""
     # Check the complete executable contract before creating state or prompting.
     for command in ("findmnt", "lsblk", "swapon", "cryptsetup"):
         if shutil.which(command) is None:
@@ -191,7 +194,60 @@ def prepare(device: str, *, change: bool = False) -> None:
             "uuid": identity[0],
             "header_sha256": header_digest(device),
         }
-        receipt = STATE / "cryptroot.json"
+        yield identity, expected, STATE / "cryptroot.json"
+    finally:
+        os.close(lock)
+
+
+def on_root_filesystem(path: Path) -> bool:
+    return os.stat(path).st_dev == os.stat("/").st_dev
+
+
+def enroll_key_file(device: str, path: Path) -> None:
+    """Add a random key kept on removable media as one more root keyslot.
+
+    The passphrase authorizes the addition and keeps working; no slot is removed.
+    An existing key file is enrolled as it is and never rewritten.
+    """
+    with session(device) as (identity, expected, receipt):
+        parent = path.parent
+        if path.is_symlink() or parent.resolve() != parent or not parent.is_dir():
+            raise ValueError("The key file path must be a plain file in a directory")
+        if on_root_filesystem(parent):
+            raise ValueError("The key file must be on the removable stick, not on root")
+        passphrase = secret("Existing disk passphrase to authorize the USB key: ")
+        if not accepts(device, passphrase):
+            raise ValueError("Existing disk passphrase was rejected; nothing changed")
+        if path.exists():
+            key = path.read_bytes()
+            if len(key) < 32:
+                raise ValueError("The existing key file is too short; nothing changed")
+        else:
+            key = os.urandom(KEY_FILE_BYTES)
+            fd = os.open(
+                path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400
+            )
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(key)
+                stream.flush()
+                os.fsync(stream.fileno())
+        if (
+            boot.key_device(device, "cryptroot") != identity
+            or header_digest(device) != expected["header_sha256"]
+        ):
+            raise ValueError("Disk identity or keyslots changed during prompting; retry")
+        if not accepts(device, key):
+            add_password(device, key, passphrase, STATE)
+            expected["header_sha256"] = header_digest(device)
+        if not accepts(device, key) or not accepts(device, passphrase):
+            raise ValueError("Key verification failed; do not reboot")
+        # The header changed; the passphrase verified above stays the receipt's subject.
+        atomic_json(receipt, expected)
+        print("USB key enrolled and tested; the disk passphrase still unlocks root.")
+
+
+def prepare(device: str, *, change: bool = False) -> None:
+    with session(device) as (identity, expected, receipt):
         if receipt.exists() or receipt.is_symlink():
             private(receipt)
             if not change and json.loads(receipt.read_text()) == expected:
@@ -237,8 +293,6 @@ def prepare(device: str, *, change: bool = False) -> None:
             private(pending)
         atomic_json(receipt, expected)
         print("Boot passphrase verified; existing recovery credentials retained.")
-    finally:
-        os.close(lock)
 
 
 def main() -> None:
@@ -249,13 +303,24 @@ def main() -> None:
         action="store_true",
         help="Prompt again to verify or add an operator-chosen passphrase",
     )
+    parser.add_argument(
+        "--enroll-key-file",
+        type=Path,
+        metavar="PATH",
+        help="Create or reuse a key file on mounted removable media and add it",
+    )
     args = parser.parse_args()
     try:
         if os.geteuid() != 0:
             raise ValueError("Run as root on the machine being rebuilt")
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
         os.umask(0o077)
-        prepare(args.device, change=args.change)
+        if args.enroll_key_file is not None:
+            if args.change:
+                raise ValueError("--change and --enroll-key-file are separate steps")
+            enroll_key_file(args.device, args.enroll_key_file)
+        else:
+            prepare(args.device, change=args.change)
     except (
         OSError,
         ValueError,

@@ -30,7 +30,7 @@ entrypoints:
     purpose: Enforce encrypted persistence and atomic private file publication.
   - name: operator-command
     file: cli.py
-    purpose: The luxnix command defaults to fresh installation guidance and routes installation and read-only inspection to storage/fresh_install.py, and preservation actions to storage/boot_setup.py.
+    purpose: The luxnix command defaults to fresh installation guidance and routes installation and read-only inspection to storage/fresh_install.py, preservation actions to storage/boot_setup.py, and RAM preparation/start to storage/ram_boot.py.
   - name: package
     file: __init__.py
     purpose: Inspect package ownership and interfaces.

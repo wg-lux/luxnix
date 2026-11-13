@@ -289,3 +289,48 @@ def test_ordinary_staging_never_adds_a_new_password(disk, monkeypatch):
     assert setup.header_digest(disk) == before
     assert setup.accepts(disk, OLD)
     assert not (setup.STATE / "cryptroot.json").exists()
+
+
+@pytest.fixture
+def stick():
+    """A directory on another filesystem than root, like a mounted stick."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory(dir="/dev/shm") as directory:
+        yield Path(directory)
+
+
+def test_usb_key_is_added_beside_the_passphrase_and_never_rewritten(
+    disk, stick, monkeypatch
+):
+    monkeypatch.setattr(setup, "on_root_filesystem", lambda path: False)
+    answers(monkeypatch, OLD, OLD)
+    key = stick / "host.luks-key"
+    setup.enroll_key_file(disk, key)
+    content = key.read_bytes()
+    assert len(content) == setup.KEY_FILE_BYTES and key.stat().st_mode & 0o777 == 0o400
+    assert setup.accepts(disk, content) and setup.accepts(disk, OLD)
+    assert len(list(setup.STATE.glob("header-before-*/luks.header"))) == 1
+    receipt = json.loads((setup.STATE / "cryptroot.json").read_text())
+    assert receipt["header_sha256"] == setup.header_digest(disk)
+    # Enrolling the same stick again changes neither the file nor the header.
+    setup.enroll_key_file(disk, key)
+    assert key.read_bytes() == content
+    assert setup.header_digest(disk) == receipt["header_sha256"]
+    # The matching receipt lets an ordinary rebuild proceed without a prompt.
+    answers(monkeypatch)
+    setup.prepare(disk)
+
+
+def test_usb_key_needs_the_passphrase_and_removable_media(
+    disk, stick, tmp_path, monkeypatch
+):
+    before = setup.header_digest(disk)
+    answers(monkeypatch, b"wrong-passphrase")
+    with pytest.raises(ValueError, match="rejected; nothing changed"):
+        setup.enroll_key_file(disk, stick / "host.luks-key")
+    assert not (stick / "host.luks-key").exists()
+    monkeypatch.setattr(setup, "on_root_filesystem", lambda path: True)
+    with pytest.raises(ValueError, match="not on root"):
+        setup.enroll_key_file(disk, tmp_path / "host.luks-key")
+    assert setup.header_digest(disk) == before

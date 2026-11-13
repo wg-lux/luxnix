@@ -11,6 +11,9 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+  - name: ram-command
+    file: test_ram_boot.py
+    purpose: Verify hash-free RAM staging, source and host admission, artifact integrity, quoted remote arguments and explicit apply boundaries.
   - name: fresh-install
     file: test_fresh_install.py
     purpose: Refuse unsafe erasure, resume verified fresh installation without formatting or credential replacement and inspect root-only encrypted systems.
@@ -136,7 +139,7 @@ entrypoints:
     purpose: Run only the plan's verified source in the RAM environment and hand root-created state back to its operator.
   - name: migration-kexec-vm
     file: nixtest/migration_kexec_vm_test.nix
-    purpose: A running host switches into the RAM environment with kexec; the controller reaches it only with the SSH host key pinned beforehand.
+    purpose: A running host switches into RAM through kexec; pinned SSH must work, OCR must confirm a visible console banner, and the screen opens a root terminal only after the typed phrase.
   - name: boot-default-hold-vm
     file: nixtest/boot_default_hold_vm_test.nix
     purpose: Under real UEFI firmware and systemd-boot, a held boot default survives power cuts and the hand-over boots the installed generation.

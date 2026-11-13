@@ -49,6 +49,7 @@
   - [Root Encryption Quick Steps](docs/boot-storage-quickstart.md)
   - [RAM migration](docs/migration-environment.md)
   - [Boot LUKS Storage Migration](docs/boot-storage-migration.md)
+  - [Laptop Remote Root Unlock](docs/remote-unlock-laptop.md)
   - [Boot Storage Recovery](docs/boot-storage-recovery.md)
   - [Credential Backup](docs/credential-backup.md)
   - [Unmigrated Hosts (Legacy Storage)](docs/legacy-storage-recovery.md)
