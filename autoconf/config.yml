@@ -39,6 +39,15 @@ boot_storage:
   # setup-media mounts an existing external filesystem and prepares this directory.
   state_root: /recovery/luxnix-state
   hosts:
+    gc-05:
+      hardware_uuid: c379ef1e-d4f3-9c46-bac1-1489f7558610
+      root_encryption: luks2
+      installation: in-place
+      source_retention: in-place
+      disks:
+        - path: /dev/disk/by-id/nvme-KINGSTON_OM8PGP4512Q-AI_50026B73829021B8
+          serial: '50026B73829021B8'
+          size_bytes: 512110190592
     gc-09:
       hardware_uuid: e0118e2d-e0c4-9844-a4eb-9fe2b5747b0d
       root_encryption: luks2
