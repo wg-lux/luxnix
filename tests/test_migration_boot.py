@@ -1157,6 +1157,8 @@ def kexec_host(tmp_path, monkeypatch, spec):
         raise AssertionError(args)
 
     calls = []
+    # A developer's own SSH session is not the controller of these tests.
+    monkeypatch.delenv("SSH_CONNECTION", raising=False)
     monkeypatch.setattr(boot.socket, "gethostname", lambda: spec["host"])
     monkeypatch.setattr(boot, "require_machine", lambda *a: None)
     monkeypatch.setattr(boot, "NETWORK", tmp_path / "net")
@@ -1425,3 +1427,24 @@ def test_recovery_filesystems_agree_everywhere(spec, fstype):
     environment = Path("conf/migration-environment.nix").read_text()
     if supported:
         assert f'"{fstype}"' in environment.split("supportedFilesystems", 1)[1]
+
+
+def test_kexec_refuses_a_controller_address_that_locks_out_this_session(
+    kexec_host, monkeypatch
+):
+    args, calls, _, _ = kexec_host
+    monkeypatch.setenv("SSH_CONNECTION", "192.0.2.7 50000 192.0.2.10 22")
+    with pytest.raises(ValueError, match="--controller-cidr 192.0.2.7/32"):
+        boot.kexec(args)
+    assert calls == []
+
+
+def test_kexec_flags_an_unverifiable_off_subnet_controller(spec, monkeypatch):
+    remote = spec | {"controller_cidr": "198.51.100.5/32", "gateway": "192.0.2.1"}
+    # A VPN session says nothing about the wired management network.
+    monkeypatch.setenv("SSH_CONNECTION", "172.16.255.102 50000 172.16.255.105 22")
+    assert "NOT VERIFIED" in boot.require_controller_session(remote)
+    monkeypatch.setenv("SSH_CONNECTION", "192.0.2.1 50000 192.0.2.10 22")
+    assert boot.require_controller_session(spec) is None
+    monkeypatch.delenv("SSH_CONNECTION")
+    assert boot.require_controller_session(spec) is None

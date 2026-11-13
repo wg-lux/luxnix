@@ -11,6 +11,7 @@ import stat
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -651,3 +652,49 @@ enroll_secondary_keys([], Path('/unused'))
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+@pytest.fixture
+def check(tmp_path, monkeypatch):
+    monkeypatch.setattr(in_place, "CHECK_LOGS", tmp_path / "logs")
+    monkeypatch.setattr(in_place, "_checked", set())
+    commands, statuses = [], []
+
+    def run(command, stdout, **kwargs):
+        commands.append(command)
+        stdout.write("root 5 inode 257 errors 100\n")
+        return SimpleNamespace(returncode=statuses.pop(0))
+
+    monkeypatch.setattr(in_place.subprocess, "run", run)
+    return commands, statuses, tmp_path / "logs" / "btrfs-check-test.log"
+
+
+def test_filesystem_check_runs_once_and_keeps_a_private_report(check):
+    commands, statuses, log = check
+    statuses.append(0)
+    in_place.check_filesystem("/dev/test")
+    in_place.check_filesystem("/dev/test")
+    assert commands == [["btrfs", "check", "--readonly", "/dev/test"]]
+    assert log.stat().st_mode & 0o777 == 0o600
+    assert log.parent.stat().st_mode & 0o777 == 0o700
+
+
+def test_failed_filesystem_check_names_its_report_without_relaying_it(check):
+    commands, statuses, log = check
+    statuses.append(1)
+    with pytest.raises(in_place.InPlaceError) as stop:
+        in_place.check_filesystem("/dev/test")
+    assert str(log) in str(stop.value) and "exit 1" in str(stop.value)
+    assert "inode" not in str(stop.value) and "inode 257" in log.read_text()
+    assert len(commands) == 1
+
+
+def test_filesystem_check_killed_for_memory_repeats_in_low_memory_mode(check, capsys):
+    commands, statuses, _ = check
+    statuses.extend([-9, 0])
+    in_place.check_filesystem("/dev/test")
+    assert commands[1] == ["btrfs", "check", "--readonly", "--mode=lowmem", "/dev/test"]
+    assert "low-memory mode" in capsys.readouterr().out
+    statuses.extend([-9, -9])
+    with pytest.raises(in_place.InPlaceError, match="stopped by signal 9"):
+        in_place.check_filesystem("/dev/other")

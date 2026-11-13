@@ -379,6 +379,14 @@ def encrypt_in_place(
     migration.verify_unmounted_targets(plan)
     before = snapshot_disks(plan)
     condition = in_place.root_state(layout["root_device"])
+    # The slow read-only check comes first: a filesystem that cannot be converted
+    # stops here, before any typed approval or passphrase.
+    for device in [
+        layout["root_device"],
+        *(v["device"] for v in layout.get("secondary", [])),
+    ]:
+        if in_place.root_state(device) == in_place.PLAINTEXT:
+            in_place.check_filesystem(device)
     if not apply:
         print(
             f"In-place checks passed; the root partition is {condition}. No disk "
@@ -1126,8 +1134,8 @@ INSTALLER_STEP = (
     "Conversion runs in the RAM environment. Standard (two machines): from this "
     "SSH session run devenv shell migration-boot kexec, then add --apply; copy the "
     "printed known_hosts file to your controller, reconnect on port 2222 and run "
-    "mkdir -p /recovery, mount the recovery drive there, then luxnix-migration run "
-    "--apply. At the machine's own console instead, stage the migration entry. "
+    "luxnix-migration run --apply; it mounts the recovery drive itself. At the "
+    "machine's own console instead, stage the migration entry. "
     "(docs/migration-environment.md)"
 )
 

@@ -70,6 +70,10 @@ Each step names where it runs.
    The preview prints the saved [settings](#2-settings-file); check that
    `controller_cidr` is your controller's wired address. If your session came over
    the VPN, add `--controller-cidr <controller wired ip>/32` to both commands.
+   A session that arrives on the wired network is checked: the command refuses
+   an address that would lock that session out and names the right one. Over
+   the VPN it cannot check, and prints `NOT VERIFIED` for an address outside the
+   target's wired network.
    The second command waits for `START RAM <host>`. **Before typing it**, copy the
    new host key from a second controller terminal:
 
@@ -109,12 +113,18 @@ Each step names where it runs.
 6. **RAM environment (over SSH): convert.**
 
    ```sh
-   mkdir -p /recovery
-   mount -o nosuid,nodev /dev/disk/by-uuid/<recovery-uuid> /recovery
    luxnix-migration run --apply
    ```
 
-   Type `ENCRYPT IN PLACE` and the passphrases privately. The workflow runs in the
+   It mounts the plan's recovery drive at `/recovery` itself; unlock and mount
+   an encrypted recovery drive yourself first. Before it asks for anything, it
+   checks the root filesystem read-only (`btrfs check`), which can take a long
+   time on a large disk. If that check fails, nothing has been changed and no
+   passphrase was needed; the full report is in
+   `/run/luxnix-migration/btrfs-check-<partition>.log`. That file is in RAM, so
+   read it before rebooting.
+
+   Then type `ENCRYPT IN PLACE` and the passphrases privately. The workflow runs in the
    tmux session `luxnix-migration`; after a dropped connection, reconnect as in
    step 5 and run the same command to return to it. Do the
    [prepared review](boot-storage-migration.md#prepared-review-in-the-ram-environment)
@@ -303,13 +313,15 @@ This copies and verifies the artifacts. Review the result, then repeat with
 ## 5. Boot and migrate
 
 Get in as described in [Getting in](#getting-in): approve at the screen, or
-connect over SSH. Then mount the recovery drive and run:
+connect over SSH. Then run:
 
 ```sh
-mkdir -p /recovery    # images built before 2026-11-11 lack this directory
-mount -o nosuid,nodev /dev/disk/by-uuid/<recovery-uuid> /recovery
 luxnix-migration run --apply
 ```
+
+It mounts the plan's recovery drive at `/recovery` when nothing is mounted
+there. Images built before 2026-11-13 need `mkdir -p /recovery` and
+`mount -o nosuid,nodev /dev/disk/by-uuid/<recovery-uuid> /recovery` first.
 
 At **Access is prepared**, pause for the
 [prepared review](boot-storage-migration.md#prepared-review-in-the-ram-environment).

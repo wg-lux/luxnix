@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import tempfile
 
@@ -208,9 +209,68 @@ def verify_containers_before_change(
             )
 
 
+# Root-only and in RAM: check output can name files, so it is never relayed.
+CHECK_LOGS = Path("/run/luxnix-migration")
+_checked: set[str] = set()
+
+
+def check_filesystem(device: str) -> None:
+    """Read-only Btrfs check, once per device; the full report stays in a private log.
+
+    Runs before any prompt, so a filesystem that cannot be converted stops the
+    workflow before the operator has typed approvals and passphrases.
+    """
+    if device in _checked:
+        return
+    CHECK_LOGS.mkdir(mode=0o700, parents=True, exist_ok=True)
+    log = CHECK_LOGS / f"btrfs-check-{Path(device).name}.log"
+    print(
+        f"Checking the filesystem on {device} read-only; a large disk can take a "
+        "long time. Nothing is changed.",
+        flush=True,
+    )
+    modes = [[], ["--mode=lowmem"]]
+    for position, mode in enumerate(modes):
+        fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w") as report:
+            try:
+                status = subprocess.run(
+                    ["btrfs", "check", "--readonly", *mode, device],
+                    stdin=subprocess.DEVNULL,
+                    stdout=report,
+                    stderr=subprocess.STDOUT,
+                    pass_fds=_operation_locks.get(),
+                    timeout=7200,
+                    check=False,
+                ).returncode
+            except subprocess.TimeoutExpired:
+                raise InPlaceError(
+                    f"The filesystem check on {device} did not finish within two "
+                    f"hours. Nothing has been changed. Its report so far: {log}"
+                ) from None
+        if status == 0:
+            _checked.add(device)
+            return
+        if status != -signal.SIGKILL or position + 1 == len(modes):
+            break
+        print(
+            "The check was killed, usually for lack of memory. Repeating it in "
+            "low-memory mode, which is slower.",
+            flush=True,
+        )
+    reason = (
+        f"was stopped by signal {-status}" if status < 0 else f"failed (exit {status})"
+    )
+    raise InPlaceError(
+        f"The read-only filesystem check on {device} {reason}. Nothing has been "
+        f"changed. Its full report is in {log} (in RAM: read it before a reboot). "
+        "The filesystem must pass btrfs check before it can be encrypted in place"
+    )
+
+
 def shrink_filesystem(device: str) -> None:
     """Make room for the LUKS2 header. Btrfs only resizes while mounted."""
-    run("btrfs", "check", "--readonly", device, timeout=7200)
+    check_filesystem(device)
     with mounted(device, "subvolid=5") as top:
         run(
             "btrfs",

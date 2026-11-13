@@ -25,6 +25,16 @@ def plaintext_test_machine(monkeypatch):
     monkeypatch.setattr(setup, "live_root_is_luks2", lambda: False)
 
 
+@pytest.fixture(autouse=True)
+def filesystem_checks(monkeypatch):
+    """Record the read-only check instead of running btrfs on the test machine."""
+    from lx_administration.storage import in_place
+
+    checked = []
+    monkeypatch.setattr(in_place, "check_filesystem", checked.append)
+    return checked
+
+
 @pytest.fixture
 def state(tmp_path, monkeypatch):
     root, plan, progress = migration_tests.state.__wrapped__(tmp_path, monkeypatch)

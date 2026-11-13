@@ -1,5 +1,18 @@
 # Operator change notes
 
+## 2026-11-13 — RAM conversion: earlier checks, fewer commands
+
+- `luxnix-migration run` mounts the plan's recovery drive itself and runs the
+  read-only `btrfs check` before the typed approval and the passphrases. A
+  failed check keeps its full report in
+  `/run/luxnix-migration/btrfs-check-<partition>.log` (in RAM) and changes
+  nothing.
+- `migration-boot kexec` refuses a `controller_cidr` that excludes the wired SSH
+  session it is run from, and marks an address it cannot verify.
+- The conversion code runs from the plan's saved source: update the checkout on
+  the target and rerun `devenv shell luxnix migrate` so the plan uses this
+  revision, then start the RAM environment again.
+
 ## 2026-11-04 — NetworkManager startup
 
 The shared boot module explicitly starts `NetworkManager` and

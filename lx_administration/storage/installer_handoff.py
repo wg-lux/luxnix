@@ -36,6 +36,39 @@ def image_host() -> str:
     return host
 
 
+def mount_recovery() -> None:
+    """Mount the recovery drive this image was built for, unless it already is.
+
+    The image names the filesystem by UUID. An encrypted recovery drive needs its
+    own passphrase and stays an operator step.
+    """
+    mount = recovery_media.MOUNT
+    if os.path.ismount(mount):
+        return
+    recovery = json.loads(SPEC.read_text())["recovery"]
+    device = Path("/dev/disk/by-uuid") / str(recovery["uuid"])
+    if recovery["luks_uuid"] is not None:
+        raise migration.MigrationError(
+            "The recovery drive is encrypted and not mounted",
+            fix=f"unlock it, mount it at {mount}, then run luxnix-migration again",
+        )
+    if not device.exists():
+        raise migration.MigrationError(
+            f"The recovery drive (filesystem {recovery['uuid']}) is not connected",
+            fix="connect the drive that holds this plan, then run luxnix-migration "
+            "again",
+        )
+    mount.mkdir(mode=0o700, exist_ok=True)
+    if any(mount.iterdir()):
+        raise migration.MigrationError(f"Refusing to hide existing files under {mount}")
+    subprocess.run(
+        ["mount", "-t", recovery["fstype"], "-o", "nosuid,nodev", "--", device, mount],
+        check=True,
+        stdin=subprocess.DEVNULL,
+    )
+    print(f"Mounted the recovery drive at {mount}.", file=sys.stderr)
+
+
 def plan_source(state: Path) -> Path:
     """The verified copy of the plan's source; refuses any other revision."""
     with migration.locked_state(state):
@@ -125,6 +158,7 @@ def main(argv: list[str] | None = None) -> None:
                 "migration environment"
             )
         host = image_host()
+        mount_recovery()
         state = recovery_media.STATE_ROOT / host
         source = plan_source(state)
     except (ValueError, OSError, subprocess.SubprocessError) as error:

@@ -1144,6 +1144,37 @@ def require_controller_link(spec: dict, attempts: int = 6) -> None:
     )
 
 
+def require_controller_session(spec: dict) -> str | None:
+    """Refuse a switch that would lock out the operator's own SSH session.
+
+    A session arriving on the management network shows the controller's real
+    address there. Returns a note when the address cannot be verified this way.
+    """
+    allowed = ipaddress.IPv4Network(spec["controller_cidr"])
+    subnet = ipaddress.IPv4Interface(spec["address"]).network
+    session = os.environ.get("SSH_CONNECTION", "").split()
+    try:
+        client = ipaddress.ip_address(session[0]) if session else None
+    except ValueError:
+        client = None
+    if isinstance(client, ipaddress.IPv4Address) and client in subnet:
+        if client not in allowed:
+            raise ValueError(
+                f"This SSH session comes from {client}, but the RAM environment "
+                f"would accept SSH only from {allowed}: you could not reconnect. "
+                f"Rerun with --controller-cidr {client}/32. Nothing was loaded"
+            )
+        return None
+    if not allowed.subnet_of(subnet):
+        return (
+            f"NOT VERIFIED: {allowed} is outside the management network {subnet}. "
+            "SSH will work only if that address reaches this host through "
+            f"{spec.get('gateway') or 'a router'} unchanged. If your controller is on "
+            f"{subnet}, stop and use --controller-cidr <its address there>/32"
+        )
+    return None
+
+
 def kexec(args) -> None:
     """Build, then start the RAM environment in place of the running system."""
     host = socket.gethostname().split(".")[0]
@@ -1160,6 +1191,7 @@ def kexec(args) -> None:
         raise ValueError("Remote access needs administrator SSH keys in the inventory")
     link = management_link(spec)
     require_controller_link(spec)
+    unverified = require_controller_session(spec)
     available = int(
         next(
             line.split()[1]
@@ -1210,7 +1242,7 @@ def kexec(args) -> None:
             "administrator keys only\n"
             f"Host key: {fingerprint}\n"
             f"Pinned in: {known_hosts}\n"
-            f"Connect with: {connect}",
+            f"Connect with: {connect}" + (f"\n{unverified}" if unverified else ""),
             flush=True,
         )
         if not args.apply:

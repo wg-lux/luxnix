@@ -25,7 +25,11 @@ def ram(tmp_path, monkeypatch):
     source = state_root / "sources" / REVISION
     source.mkdir(parents=True)
     spec = tmp_path / "migration.json"
-    spec.write_text(json.dumps({"host": "gc-09"}))
+    recovery = {"uuid": "1" * 8, "fstype": "ext4", "luks_uuid": None}
+    spec.write_text(json.dumps({"host": "gc-09", "recovery": recovery}))
+    mount = tmp_path / "recovery"
+    monkeypatch.setattr(handoff.recovery_media, "MOUNT", mount)
+    monkeypatch.setattr(handoff.os.path, "ismount", lambda path: path == mount)
     monkeypatch.setattr(handoff, "SPEC", spec)
     # A developer's own SSH session must not move these tests into tmux.
     monkeypatch.delenv("SSH_CONNECTION", raising=False)
@@ -214,3 +218,40 @@ def test_the_window_shows_the_result_and_waits_for_enter():
     )
     assert "plan stopped" in result.stdout
     assert "ended with exit status 3. Press Enter" in result.stdout
+
+
+def test_launcher_mounts_the_images_own_recovery_drive(ram, monkeypatch, tmp_path):
+    _, _, calls = ram
+    by_uuid = tmp_path / "by-uuid"
+    by_uuid.mkdir()
+    (by_uuid / ("1" * 8)).touch()
+    real = handoff.Path
+    monkeypatch.setattr(
+        handoff,
+        "Path",
+        lambda value: by_uuid if value == "/dev/disk/by-uuid" else real(value),
+    )
+    monkeypatch.setattr(handoff.os.path, "ismount", lambda path: False)
+    monkeypatch.setattr(
+        handoff.subprocess, "run", lambda command, **kw: calls.append((command, kw))
+    )
+    handoff.mount_recovery()
+    command, _ = calls[0]
+    mount = handoff.recovery_media.MOUNT
+    assert command == [
+        "mount", "-t", "ext4", "-o", "nosuid,nodev", "--", by_uuid / ("1" * 8), mount,
+    ]  # fmt: skip
+    assert mount.stat().st_mode & 0o777 == 0o700
+
+
+def test_launcher_names_an_absent_or_encrypted_recovery_drive(ram, monkeypatch):
+    _, _, calls = ram
+    monkeypatch.setattr(handoff.os.path, "ismount", lambda path: False)
+    with pytest.raises(migration.MigrationError, match="not connected"):
+        handoff.mount_recovery()
+    spec = json.loads(handoff.SPEC.read_text())
+    spec["recovery"]["luks_uuid"] = "2" * 8
+    handoff.SPEC.write_text(json.dumps(spec))
+    with pytest.raises(migration.MigrationError, match="encrypted"):
+        handoff.mount_recovery()
+    assert calls == []
