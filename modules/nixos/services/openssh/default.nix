@@ -7,6 +7,7 @@
 let
   inherit (lib)
     any
+    concatStringsSep
     elem
     elemAt
     filter
@@ -121,6 +122,15 @@ in
     forwarding = {
       allowTcp = mkBoolOpt false "Allow SSH TCP forwarding.";
       allowAgent = mkBoolOpt false "Allow SSH agent forwarding.";
+      permitOpen =
+        mkOpt (types.listOf (types.strMatching "[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?:[1-9][0-9]{0,4}"))
+          [ ]
+          ''
+            Exact host:port destinations the admin account may reach through SSH
+            forwarding. A non-empty list permits client-to-server (local and
+            dynamic) forwarding to these destinations only; remote forwarding
+            stays disabled unless allowTcp is set. Wildcards are rejected.
+          '';
       gatewayPorts = mkOpt (types.enum [
         "yes"
         "no"
@@ -150,11 +160,20 @@ in
 
       settings = {
         AllowAgentForwarding = forwardingCfg.allowAgent;
-        AllowTcpForwarding = if forwardingCfg.allowTcp then "yes" else "no";
+        AllowTcpForwarding =
+          if forwardingCfg.allowTcp then
+            "yes"
+          else if forwardingCfg.permitOpen != [ ] then
+            "local"
+          else
+            "no";
         AllowUsers = [ adminUserName ];
         GatewayPorts = forwardingCfg.gatewayPorts;
         KbdInteractiveAuthentication = false;
         PasswordAuthentication = false;
+        PermitOpen = mkIf (forwardingCfg.permitOpen != [ ]) (
+          concatStringsSep " " (unique forwardingCfg.permitOpen)
+        );
         PermitRootLogin = "no";
         StreamLocalBindUnlink = "yes";
         X11Forwarding = false;

@@ -32,6 +32,9 @@ entrypoints:
   - name: password-file-deletion
     file: delete-password-files.sh
     purpose: Destructive local deletion of password files by path match; dry run by default, --apply requires typed confirmation.
+  - name: lx-annotate-tunnel
+    file: lx-annotate-tunnel.py
+    purpose: Open one inventory host's lx-annotate UI through a destination-limited SSH tunnel and a fail-closed browser profile.
   - name: structure-linter
     file: lint_structure.py
     purpose: Inspect structure linter ownership and interfaces.

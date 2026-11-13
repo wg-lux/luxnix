@@ -380,6 +380,21 @@ commands:
     implementation: scripts/lx-annotate-streamable-migration.sh
     documentation: modules/nixos/services/lx-annotate-local/README.md
 
+  - id: lx-annotate-tunnel
+    summary: Open one host's lx-annotate browser UI through a scoped SSH tunnel for annotation and hub export.
+    risk: remote-read-only
+    operator_confirmation_required: false
+    usage: devenv shell lx-annotate-tunnel <host> [--hub-export | --page <path>] [--port <port>] [--no-browser] [--dry-run]
+    implementation: scripts/lx-annotate-tunnel.py
+    documentation: docs/lx-annotate-remote-tunnel.md
+    prerequisites:
+      - Target deployed with services.luxnix.lxAnnotateLocal.remoteAccess.sshTunnel.enable; sshd then forwards only to its own lx-annotate virtual host.
+      - Admin SSH access to the host and a personal lx-annotate/Keycloak account.
+    effects:
+      - Reads service states and the public TLS certificate over SSH, then holds a local SOCKS tunnel until the browser closes.
+      - Starts Firefox with a private per-host profile that has no direct route to the lx-annotate name; a closed tunnel fails instead of reaching another instance.
+      - The wrapper changes no remote state; annotations and hub-export marking are made by the signed-in user in the application and audited there.
+
   - id: run-ansible
     summary: Apply the main Ansible playbook to configured hosts.
     risk: remote-state

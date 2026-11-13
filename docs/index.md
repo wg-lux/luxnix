@@ -68,6 +68,7 @@ for canonical invocations and risk labels.
 - [Vault Server Rebuild](./vault-server-rebuild.md): guarded recovery after irrecoverable loss of the `gs-02` unseal share.
 - [SSH Host Identity](./ssh-host-identity.md): host-key registry, rotation, and recovery workflow.
 - [Access Management](./access-management.md): accounts, authentication, and access boundaries.
+- [Remote annotation tunnel](lx-annotate-remote-tunnel.md): open another host's lx-annotate from the controller to annotate videos and start hub exports.
 - [Clinical Hub Transfer Guide](./clinical-hub-transfer-guide.md): plain-language setup, daily transfer workflow, status meanings, and safe failure handling for medical personnel.
 
 ## Service engineering

@@ -89,6 +89,8 @@
         };
       };
 
+      remoteAccess.sshTunnel.enable = true;
+
       runtime = {
         deploymentRole = "site_node";
         ffmpegWorker.cudaVisibleDevices = "0";

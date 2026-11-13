@@ -69,6 +69,7 @@
   - [Server Rebuild](docs/vault-server-rebuild.md)
 - **Clinical Operations**
   - [Central Hub Transfer](docs/clinical-hub-transfer-guide.md)
+  - [Remote Annotation Tunnel](docs/lx-annotate-remote-tunnel.md)
 - **Diagnostics and Reviews**
   - [Historical gc-02 Boot Repair (2026-11-04)](docs/guides/gc-02-boot-repair.md)
   - [Historical gc-10 Boot Review (2026-11-05)](docs/guides/gc-10-boot-applicability.md)

@@ -1628,6 +1628,11 @@ in
         {
           environment.systemPackages = [ lxAnnotateMigrateVideoStreamableStorageScript ];
 
+          # Operator tunnel: sshd forwards to this browser virtual host only.
+          services.ssh.forwarding.permitOpen = mkIf cfg.remoteAccess.sshTunnel.enable [
+            "${cfg.django.hostname}:443"
+          ];
+
           services.luxnix.lxAnnotateLocal.django.identitySaltKeyringFile = mkIf (
             cfg.django.enrollLegacyDefaultSalt && !cfg.django.identitySaltViaSecretSpec
           ) (mkDefault "/etc/secrets/vault/lx_annotate_identity_keyring.yml");

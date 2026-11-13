@@ -108,6 +108,8 @@
         };
       };
 
+      remoteAccess.sshTunnel.enable = true;
+
       runtime = {
         ffmpegWorker.cudaVisibleDevices = "0";
         hlsEncodingProfile = "clinical_h264_nvenc_cq_v1";

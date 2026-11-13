@@ -134,6 +134,14 @@ bare addresses are rejected; `lib.luxnix.networkAccess.hostCidr` turns a single
 address into `/32` or `/128`. The Traefik dashboard list and the legacy nginx-host
 configuration do not use this module yet.
 
+## SSH forwarding
+
+sshd forwarding is off on every host. The only exception is
+`services.luxnix.lxAnnotateLocal.remoteAccess.sshTunnel.enable`, which sets
+`services.ssh.forwarding.permitOpen` to the host's own lx-annotate virtual host
+on port 443 for the [remote annotation tunnel](lx-annotate-remote-tunnel.md).
+The SSH host contract test rejects any other forwarding configuration.
+
 ## Change and verification workflow
 
 1. Change `ansible/inventory/hosts.ini` for host membership or VPN addresses.

@@ -125,6 +125,7 @@ nav:
       - Server Rebuild: vault-server-rebuild.md
   - Clinical Operations:
       - Central Hub Transfer: clinical-hub-transfer-guide.md
+      - Remote Annotation Tunnel: lx-annotate-remote-tunnel.md
   - Diagnostics and Reviews:
       - Historical gc-02 Boot Repair (2026-11-04): guides/gc-02-boot-repair.md
       - Historical gc-10 Boot Review (2026-11-05): guides/gc-10-boot-applicability.md

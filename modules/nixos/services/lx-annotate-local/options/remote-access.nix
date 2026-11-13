@@ -48,6 +48,23 @@ in
               Keycloak login; no API request is sent cross-origin.
             '';
           };
+          sshTunnel = mkOption {
+            type = types.submodule {
+              options.enable = mkOption {
+                type = types.bool;
+                default = false;
+                description = ''
+                  Let the admin SSH account forward connections to this host's
+                  own lx-annotate virtual host on port 443 and to no other
+                  destination. Operators then reach the browser UI through
+                  `devenv shell lx-annotate-tunnel <host>`; Keycloak login,
+                  TLS and the hub transfer mTLS gate are unchanged.
+                '';
+              };
+            };
+            default = { };
+            description = "Operator SSH tunnel to the local browser UI.";
+          };
           restrictToVpn = mkOption {
             type = types.submodule {
               options = {

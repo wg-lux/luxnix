@@ -133,3 +133,29 @@ def test_vpn_restriction_still_requires_a_nonempty_list() -> None:
     )
 
     assert any("allowedClientCidrs" in message for message in failed)
+
+
+def test_ssh_tunnel_permits_only_the_own_browser_virtual_host() -> None:
+    def forwarding(enabled: str) -> dict[str, Any]:
+        return _eval_gs_02(
+            "services.luxnix.lxAnnotateLocal.remoteAccess.sshTunnel.enable"
+            f" = lib.mkForce {enabled};",
+            """
+            {
+              tcp = cfg.services.openssh.settings.AllowTcpForwarding;
+              permitOpen = cfg.services.openssh.settings.PermitOpen or null;
+              gatewayPorts = cfg.services.openssh.settings.GatewayPorts;
+            }
+            """,
+        )
+
+    assert forwarding("true") == {
+        "tcp": "local",
+        "permitOpen": "gs-02.intern:443",
+        "gatewayPorts": "no",
+    }
+    assert forwarding("false") == {
+        "tcp": "no",
+        "permitOpen": None,
+        "gatewayPorts": "no",
+    }

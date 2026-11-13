@@ -77,6 +77,8 @@ in
                   settings = c.services.openssh.settings;
                   vpnInterface = c.services.ssh.network.vpnInterface;
                   vpnTcpPorts = c.networking.firewall.interfaces.${"$"}{vpnInterface}.allowedTCPPorts or [];
+                  annotate = c.services.luxnix.lxAnnotateLocal;
+                  tunnel = annotate.enable && annotate.remoteAccess.sshTunnel.enable;
                 in {
                   inherit host;
                   enable = c.services.openssh.enable;
@@ -90,7 +92,14 @@ in
                   permitRootLogin = settings.PermitRootLogin;
                   x11Forwarding = settings.X11Forwarding;
                   allowAgentForwarding = settings.AllowAgentForwarding;
-                  allowTcpForwarding = settings.AllowTcpForwarding;
+                  # Only the operator tunnel may open forwarding, and only to
+                  # the host's own lx-annotate virtual host.
+                  tcpForwardingOk =
+                    if tunnel then
+                      settings.AllowTcpForwarding == "local"
+                      && settings.PermitOpen == "${"$"}{annotate.django.hostname}:443"
+                    else
+                      settings.AllowTcpForwarding == "no" && !(settings ? PermitOpen);
                   gatewayPorts = settings.GatewayPorts;
                   allowUsersOk = settings.AllowUsers == [c.user.admin.name];
                   globalFirewallSsh = builtins.elem 22 c.networking.firewall.allowedTCPPorts;
@@ -116,7 +125,7 @@ in
             permit_root_login \
             x11_forwarding \
             allow_agent_forwarding \
-            allow_tcp_forwarding \
+            tcp_forwarding_ok \
             gateway_ports \
             allow_users_ok \
             global_firewall_ssh \
@@ -134,7 +143,7 @@ in
             [ "$permit_root_login" = "no" ] || fail "expected PermitRootLogin=no for $host, got: $permit_root_login"
             [ "$x11_forwarding" = "false" ] || fail "expected X11Forwarding=false for $host"
             [ "$allow_agent_forwarding" = "false" ] || fail "expected AllowAgentForwarding=false for $host"
-            [ "$allow_tcp_forwarding" = "no" ] || fail "expected AllowTcpForwarding=no for $host, got: $allow_tcp_forwarding"
+            [ "$tcp_forwarding_ok" = "true" ] || fail "expected SSH TCP forwarding to be disabled or limited to the lx-annotate tunnel target for $host"
             [ "$gateway_ports" = "no" ] || fail "expected GatewayPorts=no for $host, got: $gateway_ports"
             [ "$allow_users_ok" = "true" ] || fail "expected AllowUsers to contain only the configured admin user for $host"
             [ "$global_firewall_ssh" = "false" ] || fail "expected global firewall TCP/22 to be closed for $host"
@@ -154,7 +163,7 @@ in
               .permitRootLogin,
               (.x11Forwarding|tostring),
               (.allowAgentForwarding|tostring),
-              .allowTcpForwarding,
+              (.tcpForwardingOk|tostring),
               .gatewayPorts,
               (.allowUsersOk|tostring),
               (.globalFirewallSsh|tostring),

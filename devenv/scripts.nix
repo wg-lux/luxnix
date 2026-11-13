@@ -126,6 +126,9 @@
   vault-migrate-local-key.package = pkgs.zsh;
   vault-migrate-local-key.exec = ''${pkgs.uv}/bin/uv run python scripts/vault/migrate_local_key.py "$@"'';
 
+  lx-annotate-tunnel.package = pkgs.zsh;
+  lx-annotate-tunnel.exec = ''${pkgs.uv}/bin/uv run python scripts/lx-annotate-tunnel.py "$@"'';
+
   # SSH session management
   ssh-all.package = pkgs.zsh;
   ssh-all.exec = ''${pkgs.uv}/bin/uv run python scripts/tmux-inventory-session.py workspace "$@"'';

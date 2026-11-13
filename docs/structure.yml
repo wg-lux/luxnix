@@ -31,6 +31,9 @@ entrypoints:
 - name: operator-change-notes
   file: changelog.md
   purpose: Operator actions for storage workflow updates, existing installations and interrupted migrations.
+- name: lx-annotate-remote-tunnel
+  file: lx-annotate-remote-tunnel.md
+  purpose: Operator workflow and sshd contract for annotating and starting hub exports on another host through the scoped SSH tunnel.
 - name: remote-unlock-laptop
   file: remote-unlock-laptop.md
   purpose: Step-by-step early-boot SSH root unlock setup, attended first test and troubleshooting for a laptop.

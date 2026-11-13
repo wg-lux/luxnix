@@ -19,6 +19,9 @@ group_services:
   # publishing and fails closed when the encoder is unavailable.
   luxnix.lxAnnotateLocal.runtime.hlsEncodingProfile: '"clinical_h264_nvenc_cq_v1"'
   luxnix.lxAnnotateLocal.runtime.ffmpegWorker.cudaVisibleDevices: '"0"'
+  # Operators annotate and mark hub exports through lx-annotate-tunnel; sshd
+  # forwards to the host's own lx-annotate virtual host and nowhere else.
+  luxnix.lxAnnotateLocal.remoteAccess.sshTunnel.enable: "true"
   luxnix.lxAnnotateLocal.hub.outboundTransfer.enable: "true"
   luxnix.lxAnnotateLocal.hub.outboundTransfer.requireMtls: "true"
   luxnix.lxAnnotateLocal.hub.outboundTransfer.caFile: '"/etc/secrets/vault/hub-pki/vault-server-ca.pem"'
