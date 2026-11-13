@@ -11,7 +11,13 @@
   session it is run from, and marks an address it cannot verify.
 - The conversion code runs from the plan's saved source: update the checkout on
   the target and rerun `devenv shell luxnix migrate` so the plan uses this
-  revision, then start the RAM environment again.
+  revision, then start the RAM environment again. A plan whose earlier run
+  stopped before any partition was encrypted is replaced automatically; it no
+  longer stops with "The checkout or flake.lock changed after this plan
+  started".
+- A `migration-boot kexec` start checks its store image in memory and restarts
+  into the installed system after 15 seconds when it is damaged or the RAM
+  kernel crashes, instead of hanging.
 
 ## 2026-11-04 — NetworkManager startup
 

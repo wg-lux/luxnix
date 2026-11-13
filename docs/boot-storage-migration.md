@@ -153,7 +153,11 @@ Status, next-step inspection, verification and previews only read. Planning or t
 guide replaces an outdated plan that has **not started**, keeping the previous one
 as `<state>.superseded-<id>`. A plan has not started while its install is pending
 and its provisioning journal is absent or `planned`; check `progress.json` and
-`provision.json` if unsure. Started plans continue through
+`provision.json` if unsure. A conversion that stopped before encryption began,
+for example at the filesystem check, counts the same: when the journal is
+`running` or `interrupted` but the root and every planned data partition are
+still plaintext Btrfs by their own metadata, a changed checkout replaces the
+plan. Other started plans continue through
 [recovery review](#interrupted-setup). A replacement collects fresh preflight and
 recovery evidence; keep plan revisions, receipts and journals unedited.
 

@@ -877,8 +877,40 @@ def plan_has_started(state: Path) -> bool:
         )
 
 
+def stopped_before_any_change(state: Path) -> bool:
+    """A conversion that stopped before encryption began left every target as it was.
+
+    The journal records the attempt, but each partition's own metadata decides:
+    all planned targets must still be plaintext Btrfs, and installation pending.
+    """
+    from lx_administration.storage import secret_preflight
+
+    with migration.locked_state(state):
+        plan = migration.load_plan(state)
+        if migration.load_progress(state, plan)["install"]["status"] != "pending":
+            return False
+        if not journal_path(state).exists() or load_journal(state, plan).phase not in {
+            Phase.RUNNING,
+            Phase.INTERRUPTED,
+        }:
+            return False
+    layout = plan.get("config", {}).get("in_place")
+    if not layout:
+        return False
+    for device in [
+        layout["root_device"],
+        *(v["device"] for v in layout.get("secondary", [])),
+    ]:
+        probe = secret_preflight.privileged(
+            "blkid", "-p", "-o", "value", "-s", "TYPE", device
+        )
+        if probe.returncode or probe.stdout.decode().strip() != "btrfs":
+            return False
+    return True
+
+
 def refresh_plan(state: Path, spec: dict) -> None:
-    """Replace an outdated, unstarted plan; a started plan is never replaced."""
+    """Replace an outdated plan that changed no disk; any other is never replaced."""
     with migration.state_lock(state):
         _refresh_plan(state, spec)
 
@@ -894,7 +926,10 @@ def _refresh_plan(state: Path, spec: dict) -> None:
         for key in plan["spec"].keys() | spec.keys()
         if plan["spec"].get(key) != spec.get(key)
     )
+    untouched = False
     if plan_has_started(state):
+        untouched = stopped_before_any_change(state)
+    if plan_has_started(state) and not untouched:
         if changed:
             raise migration.MigrationError(
                 f"Autoconf changed {', '.join(changed)} after this plan started; "
@@ -912,8 +947,13 @@ def _refresh_plan(state: Path, spec: dict) -> None:
     if secret_preflight.privileged("mv", "-n", str(state), str(kept)).returncode:
         raise migration.MigrationError(f"Could not move {state} aside; nothing changed")
     print(
-        "\nThe checkout or Autoconf changed before this plan started, so it is "
-        f"replaced. Old plan kept at {kept}"
+        "\nThe checkout or Autoconf changed "
+        + (
+            "and the earlier run stopped before any disk change"
+            if untouched
+            else "before this plan started"
+        )
+        + f", so the plan is replaced. Old plan kept at {kept}"
     )
     save_plan(spec, state)
 

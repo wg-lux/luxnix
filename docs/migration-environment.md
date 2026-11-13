@@ -448,6 +448,15 @@ Your connection ends; after a minute or two, reconnect with the printed command.
 The machine's screen shows the address, the allowed controller and the
 fingerprint, or says that SSH stayed closed if the key did not arrive.
 
+Before anything runs from it, the RAM environment compares its store image in
+memory with the digest in the bundle. If they differ, the screen says so and the
+machine restarts into the installed system after 15 seconds; no disk was
+changed, so start again. A crash of the RAM kernel also restarts the machine
+after 15 seconds instead of hanging; its report is kept in
+`/var/lib/systemd/pstore` on the installed system. If starts keep failing this
+way on one machine, use the [staged boot entry](#4-stage-then-arm): a firmware
+restart resets all hardware, which a switch from the running system does not.
+
 Run both commands in an interactive terminal as your normal user (not `sudo -i`):
 they need your private runtime directory and ask for the phrase and for `sudo`.
 The image is about 430 MB and fits there on machines with 16 GB.

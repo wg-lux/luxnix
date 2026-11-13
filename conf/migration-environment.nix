@@ -285,6 +285,37 @@ let
                 fi
               '';
             };
+            # A kexec start has no firmware or loader to authenticate the image, and
+            # memory damaged during the switch has left the store unreadable. Compare
+            # it with the digest in the bundle's command line before anything runs
+            # from it; a mismatch returns to the installed system instead of hanging.
+            initrd.systemd.services.luxnix-kexec-integrity = lib.mkIf hostKexec {
+              requiredBy = [ "initrd.target" ];
+              before = [ "initrd.target" ];
+              unitConfig.DefaultDependencies = false;
+              serviceConfig = {
+                Type = "oneshot";
+                StandardOutput = "journal+console";
+                StandardError = "journal+console";
+              };
+              script = ''
+                expected=
+                for word in $(cat /proc/cmdline); do
+                  case "$word" in
+                    luxnix.store_sha256=*) expected="''${word#*=}" ;;
+                  esac
+                done
+                actual="$(sha256sum /nix-store.squashfs | cut -d ' ' -f 1)"
+                if [ -n "$expected" ] && [ "$actual" = "$expected" ]; then
+                  exit 0
+                fi
+                echo "LuxNix RAM image does not match its build (damaged in memory)."
+                echo "No disk was changed. Restarting the installed system in 15 seconds;"
+                echo "then start the RAM environment again."
+                sleep 15
+                echo b > /proc/sysrq-trigger
+              '';
+            };
             initrd.availableKernelModules = [
               "nvme"
               "ahci"
@@ -318,7 +349,10 @@ let
                 "noresume"
                 "rd.systemd.gpt_auto=0"
                 "systemd.gpt_auto=0"
-              ];
+              ]
+              # A crashed RAM kernel restarts the machine instead of hanging until
+              # someone at the machine cuts power; the report stays in pstore.
+              ++ lib.optional hostKexec "panic=15";
             uki = {
               name = "luxnix-migration-${spec.host}";
               version = spec.revision;
@@ -363,7 +397,9 @@ runtimeSystem.extendModules {
             mkdir $out
             ln -s ${runtime.system.build.kernel}/${runtime.system.boot.loader.kernelFile} $out/kernel
             ln -s ${runtime.system.build.netbootRamdisk}/initrd $out/initrd
-            echo -n ${pkgs.lib.escapeShellArg "init=${runtime.system.build.toplevel}/init ${toString runtime.boot.kernelParams}"} > $out/cmdline
+            digest=$(sha256sum ${runtime.system.build.squashfsStore} | cut -d ' ' -f 1)
+            echo -n ${pkgs.lib.escapeShellArg "init=${runtime.system.build.toplevel}/init ${toString runtime.boot.kernelParams}"} \
+              "luxnix.store_sha256=$digest" > $out/cmdline
             cp ${pkgs.writeText "manifest.json" (builtins.toJSON spec)} $out/manifest.json
           '';
       }

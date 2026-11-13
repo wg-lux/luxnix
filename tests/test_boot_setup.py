@@ -614,6 +614,7 @@ def test_a_started_plan_survives_a_moved_checkout(monkeypatch, tmp_path):
         setup, "saved_plan", lambda state: {"spec": spec, "source": {"revision": "a"}}
     )
     monkeypatch.setattr(setup, "plan_has_started", lambda state: True)
+    monkeypatch.setattr(setup, "stopped_before_any_change", lambda state: False)
     monkeypatch.setattr(
         migration, "source_identity", lambda p: pytest.fail("a started plan is kept")
     )
@@ -1347,3 +1348,40 @@ def test_disk_inspection_keeps_partitions_nested_under_the_disk(monkeypatch):
     disk = setup.inspect_disk("/dev/disk/by-id/test")
     assert "--tree=PATH" in seen[0]
     assert [child.path for child in disk.children] == ["/dev/nvme0n1p2"]
+
+
+@pytest.mark.parametrize(
+    "kind,phase,replaced",
+    [
+        ("btrfs", setup.Phase.INTERRUPTED, True),
+        ("btrfs", setup.Phase.RUNNING, True),
+        ("crypto_LUKS", setup.Phase.INTERRUPTED, False),
+        ("btrfs", setup.Phase.PLANNED, True),
+    ],
+)
+def test_run_stopped_before_any_disk_change_does_not_pin_the_old_source(
+    environment, monkeypatch, capsys, kind, phase, replaced
+):
+    """Only a still-plaintext target lets a newer checkout replace the plan."""
+    root, plan, *_ = environment
+    before = [] if phase == setup.Phase.PLANNED else setup.snapshot_disks(plan)
+    setup.save_journal(
+        root, setup.Journal(plan_id=plan["plan_id"], phase=phase, before=before)
+    )
+    monkeypatch.setattr(migration, "source_identity", lambda p: {"revision": "new"})
+    commands, saved = [], []
+
+    def privileged(*command):
+        commands.append(command)
+        return SimpleNamespace(returncode=0, stdout=f"{kind}\n".encode())
+
+    monkeypatch.setattr(secret_preflight, "privileged", privileged)
+    monkeypatch.setattr(setup, "save_plan", lambda spec, path: saved.append(spec))
+    setup.refresh_plan(root, plan["spec"])
+    moves = [c for c in commands if c[0] == "mv"]
+    assert bool(moves) == replaced and bool(saved) == replaced
+    probed = [c for c in commands if c[:2] == ("blkid", "-p")]
+    # An unstarted plan needs no probe; an attempted one is judged by the disk.
+    assert bool(probed) == (phase != setup.Phase.PLANNED)
+    if probed and replaced:
+        assert "stopped before any disk change" in capsys.readouterr().out

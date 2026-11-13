@@ -149,6 +149,19 @@ pkgs.testers.runNixOSTest {
         controller.succeed(ssh + "test -x /run/current-system/sw/bin/luxnix-migration")
         assert controller.succeed(ssh + "ip -brief link show eth1").startswith("eth1")
 
+    with subtest("The image in memory matched its build before anything ran from it"):
+        cmdline = controller.succeed(ssh + "cat /proc/cmdline")
+        assert "luxnix.store_sha256=" in cmdline and "panic=15" in cmdline, cmdline
+        controller.succeed(ssh + "'journalctl -b -o cat -u luxnix-kexec-integrity.service | grep -q Finished'")
+
+    with subtest("tmux runs a long step in an SSH terminal"):
+        controller.succeed(
+            "TERM=xterm-256color "
+            + ssh.replace("ssh ", "ssh -tt ", 1)
+            + "'tmux new-session -s probe \"touch /run/tmux-ran\"'"
+        )
+        controller.succeed(ssh + "test -e /run/tmux-ran")
+
     with subtest("The screen shows how to connect"):
         controller.succeed(ssh + "systemctl is-active luxnix-migration-access.service")
         controller.fail(ssh + "systemctl is-active getty@tty1.service")
