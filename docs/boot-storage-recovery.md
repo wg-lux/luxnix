@@ -118,7 +118,7 @@ luxnix-root-preflight status
 
 | Code | Meaning | Fix |
 | --- | --- | --- |
-| `root-not-luks` | Configuration expects encryption; the disk is plaintext | Keep `legacy-containers` until `devenv shell luxnix migrate` finishes |
+| `root-not-luks` | Configuration expects encryption; the disk is plaintext | Complete the [preservation migration](boot-storage-quickstart.md#preserve-an-existing-installation); compatibility requires existing encrypted containers |
 | `root-is-luks` | Configuration expects plaintext; the disk is encrypted | Select `boot-luks` for this host |
 | `root-reencrypting` | Encryption is still in progress | [Resume encryption](#resume-interrupted-encryption) |
 | `mapping-missing`, `mapping-identity` | `cryptroot` is closed or backed by another device | Boot the matching generation and check the disk |
@@ -128,6 +128,33 @@ luxnix-root-preflight status
 | `recovery-credential` | No tested passphrase matches this header | Run `sudo luxnix-setup-boot-password` (repeatable) |
 | `esp-capacity`, `esp` | The EFI partition lacks space for this generation | Remove old generations |
 | `no-fallback-generation` | No other boot entry matches this disk | Boot a matching generation first, or keep recovery media ready and use an override |
+
+### gc-05: rebuild refused before conversion
+
+gc-05's inventory selects `boot-luks`, and `autoconf/config.yml` supplies its
+in-place migration profile. These describe the target; they do not encrypt the
+installed disk. If preflight reports Btrfs on `nixos_root`, the new generation
+cannot boot and is withdrawn from the system profile. Rebooting therefore keeps
+the previous generation. Repeated rebuilds cannot complete conversion.
+
+From the reviewed clean checkout **on gc-05**, run `luxnix-root-preflight status`
+to inspect the installed contract, then follow the preservation workflow with
+`devenv shell luxnix migrate`. It requires independent recovery storage, verified
+backups and credentials, and explicit approval before conversion in RAM. The
+profile's disk identity must match the attached hardware. gc-05 has no legacy
+encrypted containers; selecting `legacy-containers` with empty volumes is invalid.
+
+The obsolete host-specific LX-Annotate 1.2.2 pin has also been removed: it fails
+the current build's runtime-path contract. gc-05 now inherits the shared release.
+Build the complete candidate before migration; successful Nix evaluation alone
+does not run the wheel's build checks.
+
+`luxnix-admin-password` changes the account credential only. Keep the newly
+installed hash and import the matching credential pair into controller custody
+as described in [admin passwords](admin-passwords.md); the disk passphrase is
+separate. After conversion, complete the migration's installation and cold-boot
+acceptance before relying on the new generation. An override cannot admit a
+physical root mismatch.
 
 ### Audited override
 

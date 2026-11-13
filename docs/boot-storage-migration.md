@@ -33,8 +33,9 @@ SDDM shows the account chooser, with auto-login disabled.
 ### Splash unlock and generation recovery
 
 The initrd unlocks the LUKS2 header on the configured root partition and boots
-only from it. A host whose disk is still plaintext selects `legacy-containers`;
-the target-host preflight admits only generations that match the physical disk
+only from it. An unmigrated host with existing encrypted containers can retain
+`legacy-containers`; a host without them must complete the preservation workflow
+before activating `boot-luks`. The target-host preflight admits only generations that match the physical disk
 (see [boot storage recovery](boot-storage-recovery.md)). The plaintext bridge
 `plaintextRootBridge` exists for disposable test machines only.
 

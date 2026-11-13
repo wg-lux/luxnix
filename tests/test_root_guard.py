@@ -109,6 +109,8 @@ def test_boot_luks_on_plaintext_root_is_refused_for_every_action(action):
     )
     assert "root-not-luks" in {f.code for f in findings}
     assert all(f.hard for f in findings if f.code == "root-not-luks")
+    refusal = next(f for f in findings if f.code == "root-not-luks")
+    assert "devenv shell luxnix migrate" in refusal.message
 
 
 def test_plaintext_generation_on_encrypted_root_is_refused():

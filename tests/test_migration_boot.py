@@ -938,6 +938,94 @@ def test_short_stage_tampered_payload_cannot_arm_boot(local_bundle):
     assert "LoaderEntryOneShot" not in variables
 
 
+@pytest.mark.parametrize("apply", [False, True])
+@pytest.mark.parametrize("failure", [None, "build", "payload"])
+def test_prepare_uses_fresh_artifacts_and_preserves_stage_gates(
+    local_bundle, monkeypatch, spec, apply, failure
+):
+    command, old_bundle, args, variables, calls = local_bundle
+    spec["boot_trust"] = "local-console"
+    built = []
+
+    def build(fresh):
+        built.append(fresh.output)
+        assert fresh.boot_trust == "local-console" and fresh.console == "tty1"
+        assert fresh.sign is False
+        assert fresh.output != old_bundle
+        if failure == "build":
+            raise ValueError("build failed")
+        fresh.output.mkdir()
+        (fresh.output / "migration.efi").write_bytes(args.image.read_bytes())
+        (fresh.output / "migration.squashfs").write_bytes(
+            b"tampered" if failure == "payload" else args.payload.read_bytes()
+        )
+
+    monkeypatch.setattr(boot, "build", build)
+    # An old, unusable bundle must never be selected by this command.
+    (old_bundle / "migration.efi").write_bytes(b"obsolete loader")
+    invocation = ["prepare", *command[1:], "--allow-unverified-boot"]
+    if apply:
+        invocation.append("--apply")
+    if failure:
+        with pytest.raises(SystemExit) as error:
+            boot.main(invocation)
+        assert error.value.code == 1
+        assert "LoaderEntryOneShot" not in variables
+        assert not list(args.esp.glob("EFI/Linux/*.efi"))
+    else:
+        boot.main(invocation)
+        boot.main(invocation)
+        assert len(set(built)) == 2
+        assert ("LoaderEntryOneShot" in variables) is apply
+    assert not any("set-default" in call or "reboot" in call for call in calls)
+
+
+@pytest.mark.parametrize("extra", [[], ["other-host", "--allow-unverified-boot"]])
+def test_prepare_requires_local_target_and_explicit_console_trust(monkeypatch, extra):
+    monkeypatch.setattr(boot.socket, "gethostname", lambda: "test-host")
+    monkeypatch.setattr(boot, "build", lambda *a: pytest.fail("must not build"))
+    monkeypatch.setattr(boot, "local_stage", lambda *a: pytest.fail("must not stage"))
+    with pytest.raises(SystemExit) as error:
+        boot.main(["prepare", *extra, "--apply"])
+    assert error.value.code == 1
+
+
+@pytest.mark.parametrize("changed_source", [False, True])
+def test_prepare_builds_reviewed_bundle_before_privileged_staging(
+    local_bundle, monkeypatch, spec, changed_source
+):
+    command, bundle, args, variables, calls = local_bundle
+    spec.update(boot_trust="local-console", console="tty1")
+    (bundle / "manifest.json").write_text(json.dumps(spec))
+    unsigned = {key: value for key, value in spec.items() if key != "payload"}
+
+    def reviewed(options, root, trust, console):
+        assert options.settings == Path("/reviewed/settings.yml")
+        assert options.controller_cidr == "127.0.0.1/32"
+        assert trust == "local-console" and console == "tty1"
+        return unsigned
+
+    monkeypatch.setattr(boot, "reviewed_spec", reviewed)
+    monkeypatch.setattr(boot, "build_attribute", lambda *a: bundle)
+    monkeypatch.setattr(
+        boot.sb, "reviewed_source",
+        lambda *a: "b" * 40 if changed_source else spec["revision"],
+    )
+    invocation = [
+        "prepare", *command[1:], "--allow-unverified-boot", "--apply",
+        "--settings", "/reviewed/settings.yml", "--controller-cidr", "127.0.0.1/32",
+    ]
+    if changed_source:
+        with pytest.raises(SystemExit) as error:
+            boot.main(invocation)
+        assert error.value.code == 1
+        assert "LoaderEntryOneShot" not in variables
+        assert not calls
+    else:
+        boot.main(invocation)
+        assert "LoaderEntryOneShot" in variables
+
+
 @pytest.fixture
 def firmware(monkeypatch):
     """A fake systemd-boot variable store; bootctl writes go only here."""

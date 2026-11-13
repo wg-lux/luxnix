@@ -103,10 +103,13 @@ explains each item.
    confirm. Type `VERIFIED` for completed checks; Enter pauses and keeps progress.
    Saving the plan copies its exact source to
    `/recovery/luxnix-state/sources/<revision>`.
-3. **Convert.** Start the RAM environment from your SSH session with
-   `devenv shell migration-boot kexec --apply`, reconnect from the controller on
-   port 2222 ([two-machine steps 4–6](migration-environment.md#two-machines-the-standard-setup)),
-   mount the recovery drive at `/recovery`, and run:
+3. **Convert.** On the target run
+   `devenv shell migration-boot prepare --allow-unverified-boot` to build and
+   verify a fresh firmware-boot image, then repeat with `--apply` to arm it.
+   Reboot and approve at the target's screen
+   ([two-machine steps 4–6](migration-environment.md#two-machines-the-standard-setup)).
+   From the local console add `--controller-cidr 127.0.0.1/32` for console-only
+   access, or the controller's wired address for SSH. In RAM, run:
 
    ```sh
    luxnix-migration run --apply

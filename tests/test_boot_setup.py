@@ -975,7 +975,7 @@ def test_workflow_pauses_for_notes_then_installer(
     monkeypatch.setattr(setup.os, "geteuid", lambda: 1000)
     setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
     assert calls[-1] == "review"
-    assert "migration-boot kexec" in capsys.readouterr().out
+    assert "migration-boot prepare --allow-unverified-boot" in capsys.readouterr().out
 
 
 def test_workflow_takes_notes_in_the_terminal(workflow_environment, monkeypatch):

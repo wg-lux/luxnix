@@ -116,8 +116,6 @@
         hlsEncodingProfile = "clinical_h264_nvenc_cq_v1";
         mode = "wheel";
         monitoring.enable = true;
-        packageVersion = "1.2.2";
-        wheelPath = ../../../release-artifacts/lx-annotate/1.2.2/lx_annotate-1.2.2-py3-none-any.whl;
       };
     };
 

@@ -1171,11 +1171,12 @@ def current_host(config_path: Path) -> str:
 
 MIGRATE = "devenv shell luxnix migrate"
 INSTALLER_STEP = (
-    "Conversion runs in the RAM environment. Standard (two machines): from this "
-    "SSH session run devenv shell migration-boot kexec, then add --apply; copy the "
-    "printed known_hosts file to your controller, reconnect on port 2222 and run "
-    "luxnix-migration run --apply; it mounts the recovery drive itself. At the "
-    "machine's own console instead, stage the migration entry. "
+    "Conversion runs in the RAM environment. On this target run "
+    "devenv shell migration-boot prepare --allow-unverified-boot to build and verify "
+    "a fresh firmware-boot image; repeat with --apply to arm it. From a local console "
+    "add --controller-cidr <controller wired ip>/32 (127.0.0.1/32 for console only). "
+    "Reboot, approve BOOT UNVERIFIED at the target's screen, then run "
+    "luxnix-migration run --apply; it mounts the recovery drive itself. "
     "(docs/migration-environment.md)"
 )
 

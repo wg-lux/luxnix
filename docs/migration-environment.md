@@ -24,10 +24,11 @@ Before you start:
 - Your administrator SSH keys are in the inventory; the RAM environment accepts
   only those, only from the controller's address.
 - The recovery drive (ext4 or Btrfs) is attached to the target, on mains power.
-- Someone can reach the target's screen and keyboard for the first cold boot: the
+- Someone can reach the target's screen and keyboard to approve the RAM boot and
+  for the first cold boot: the
   installed system asks for the root passphrase on its boot splash, unless
   [remote SSH root unlock](boot-storage-migration.md#remote-ssh-root-unlock) is
-  configured. Conversion itself needs no one at the target.
+  configured. Conversion can continue over SSH after console approval.
 
 Each step names where it runs.
 
@@ -60,57 +61,43 @@ Each step names where it runs.
    asks for the checks only you can confirm. It pauses with *Conversion runs in the
    RAM environment*. Nothing on the disk has changed yet.
 
-4. **Target: start the RAM environment.**
+4. **Target: prepare the firmware boot.**
 
    ```sh
-   devenv shell migration-boot kexec            # preview; saves the settings
-   devenv shell migration-boot kexec --apply
+   devenv shell migration-boot prepare --allow-unverified-boot
+   devenv shell migration-boot prepare --allow-unverified-boot --apply
    ```
 
-   The preview prints the saved [settings](#2-settings-file); check that
-   `controller_cidr` is your controller's wired address. If your session came over
-   the VPN, add `--controller-cidr <controller wired ip>/32` to both commands.
-   A session that arrives on the wired network is checked: the command refuses
-   an address that would lock that session out and names the right one. Over
-   the VPN it cannot check, and prints `NOT VERIFIED` for an address outside the
-   target's wired network.
-   The second command waits for `START RAM <host>`. **Before typing it**, copy the
-   new host key from a second controller terminal:
+   Both commands build from the current clean reviewed checkout. The first
+   verifies the image, payload, machine and recovery drive without changing boot
+   state. The second arms the one-shot entry. Neither command reuses an older
+   `~/migration-<host>` bundle or reboots the target. Nix reuses unchanged build
+   outputs. Check the printed settings; `controller_cidr` must be your
+   controller's wired address. Over VPN, supply
+   `--controller-cidr <controller wired ip>/32` on both commands.
+
+   Reboot the target when ready. At its screen, enter the displayed
+   `BOOT UNVERIFIED <host> <revision-prefix>` phrase. This opens a root terminal;
+   encryption still requires step 6. Keep the recovery drive connected.
+   With Secure Boot enabled, use the [signed build](#3-build) and
+   [staging](#4-stage-then-arm) instead.
+
+5. **Controller: connect to the RAM environment**, or continue at its console.
+   For SSH, collect the public key on port 2222 and compare its SHA256 fingerprint
+   with the one shown on the target's screen before trusting it:
 
    ```sh
-   mkdir -p /home/admin/migration-<host>-kexec
-   scp -o HostKeyAlias=<host> -o StrictHostKeyChecking=yes \
-     admin@<target wired address>:migration-<host>-kexec/known_hosts \
-     /home/admin/migration-<host>-kexec/known_hosts
-   ```
-
-   Replace `<host>` with the client hostname and `<target wired address>` with
-   its Ethernet IPv4 address. These paths assume the controller account is
-   `admin`; use its actual home directory otherwise. `HostKeyAlias` checks the
-   installed client's key against the existing hostname pin when connecting by
-   IP. Verify that pin before proceeding if it is missing or mismatched.
-   Copy the file from this waiting run: each invocation generates a new RAM host
-   key. Do not reuse another client's file or start a second invocation.
-   Before confirming, ensure a separate SSH session to the client's wired
-   address succeeds from the controller. Check `ip route get <target wired address>`
-   on the controller: its interface and source IPv4 must match the wired link
-   and the bundle's allowed `controller_cidr`. VPN access alone does not verify
-   the connection the RAM environment needs.
-
-   Then type the phrase. The target shuts down cleanly into RAM and your session
-   ends; the disks are not changed.
-
-5. **Controller: connect to the RAM environment** after a minute or two:
-
-   ```sh
-   ssh -o UserKnownHostsFile=/home/admin/migration-<host>-kexec/known_hosts \
+   mkdir -p ~/migration-<host>
+   ssh-keyscan -t ed25519 -p 2222 <target wired address> > ~/migration-<host>/known_hosts
+   ssh-keygen -lf ~/migration-<host>/known_hosts
+   # Continue only after the fingerprint matches the physical display.
+   ssh -o UserKnownHostsFile=~/migration-<host>/known_hosts \
      -o StrictHostKeyChecking=yes -p 2222 root@<target wired address>
    ```
 
-   A host-key mismatch means you did not reach the environment you started: stop
-   and investigate.
+   The key changes each boot. A mismatch means stop and investigate.
 
-6. **RAM environment (over SSH): convert.**
+6. **RAM environment (over SSH or at the console): convert.**
 
    ```sh
    luxnix-migration run --apply
@@ -138,9 +125,11 @@ Each step names where it runs.
    test login, sudo and application data, and run `devenv shell luxnix migrate`
    again to record acceptance. Keep backups and custody.
 
-If kernel lockdown (usually from Secure Boot) refuses `kexec`, replace step 4 with
-the [staged boot entry](#4-stage-then-arm): approve it once at the target's screen,
-then continue from step 5 with the fingerprint shown there.
+The firmware path is recommended for gc-05 and gc-09: it resets the hardware
+before starting the RAM kernel. UAS recovery discovery and console access have
+been exercised in QEMU; physical acceptance on these hosts is still pending.
+The [kexec path](#start-without-a-reboot-remote) remains available for separately
+validated hardware. Its observed post-switch memory corruption is unresolved.
 
 ## One machine at its console (exception)
 
@@ -167,9 +156,9 @@ generation after root encryption.
 
 There are two ways to start the RAM environment:
 
-| | `migration-boot kexec` (standard) | Staged boot entry |
+| | `migration-boot kexec` (optional) | Staged boot entry |
 | --- | --- | --- |
-| Use when | You work from the controller | You are at the target's screen, or kexec is blocked |
+| Use when | Separately validated hardware with no console approval available | Recommended; someone can approve at the target's screen |
 | How it starts | From the running host, without a reboot ([remote start](#start-without-a-reboot-remote)) | Reboot; the firmware takes the one-shot entry ([stage it first](#4-stage-then-arm)) |
 | The screen shows | Boot messages, then an access screen with the address and SSH fingerprint | Boot messages, then the approval prompt |
 | At the machine | The access screen stays up; type `LOCAL TERMINAL` and press Enter for a root shell on the screen, `exit` returns to the access screen | Type `BOOT UNVERIFIED <host> <revision-prefix>`; a root shell opens on the screen |
@@ -188,8 +177,8 @@ Connect from the controller (an address in `controller_cidr`) with:
 ssh -o UserKnownHostsFile=<known_hosts> -o StrictHostKeyChecking=yes -p 2222 root@<address>
 ```
 
-For the staged entry, write `known_hosts` yourself from the fingerprint on the
-screen; it changes with every boot. Then continue with
+For the staged entry, collect the public key and compare its fingerprint with
+the screen as in step 5 above; it changes with every boot. Then continue with
 [luxnix-migration](#5-boot-and-migrate).
 
 ### If the screen stays black
@@ -277,6 +266,13 @@ should not have; move it aside and run again to rediscover.
 `migration-boot discover` prints the same values as YAML without saving them.
 
 ## 3. Build
+
+For the guided console-approved path, `migration-boot prepare
+--allow-unverified-boot` combines this build with staging, chooses a new output
+directory automatically and reads the plan's settings. Add `--apply` to arm it.
+From the local console, pass `--controller-cidr <controller wired ip>/32`, or
+`--controller-cidr 127.0.0.1/32` for console-only access. The separate commands
+below remain available for signing and explicitly selected bundles.
 
 ```sh
 devenv shell migration-boot build gc-09 --output ~/migration-gc-09
@@ -499,7 +495,10 @@ Build a disposable console fixture with
 `LUXNIX_MIGRATION_LOCAL_CONSOLE=1 uv run python -m tests.test_migration_loader_vm`,
 set `LUXNIX_MIGRATION_BUNDLE` to its output and `LUXNIX_QEMU` to QEMU, then run
 `uv run pytest -q tests/test_migration_loader_vm.py`. This needs KVM, mtools,
-dosfstools, binutils, OpenSSL and sbsigntool.
+dosfstools, e2fsprogs, binutils, OpenSSL and sbsigntool. The test attaches the
+recovery image as a USB drive through UAS, like real recovery media; set
+`OVMF_CODE` and `OVMF_VARS` and build the fixture with
+`LUXNIX_MIGRATION_CONSOLE=tty1` for the firmware and screen test.
 
 VM tests cover RAM startup, console approval, tamper rejection, the boot default
 across power cuts (`boot-default-hold`) and the remote start without reboot with a

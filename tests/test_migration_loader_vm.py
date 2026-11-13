@@ -34,6 +34,11 @@ USB_RECOVERY = [
 ]  # fmt: skip
 
 
+def qemu_environment():
+    # The Python shell's libraries can use a different glibc from pinned QEMU.
+    return {key: value for key, value in os.environ.items() if key != "LD_LIBRARY_PATH"}
+
+
 def recovery_disk(bundle, spec, directory, *, tamper=False):
     """An ext4 image with the signed filesystem UUID, built without root."""
     disk = directory / "recovery.img"
@@ -155,7 +160,8 @@ def test_split_loader_boots_only_authenticated_ram_payload(tmp_path, case):
     ]
     with (tmp_path / "qemu.log").open("w") as log, serial.open("w") as output_log:
         process = subprocess.Popen(
-            command, stdin=subprocess.PIPE, stdout=output_log, stderr=log
+            command, stdin=subprocess.PIPE, stdout=output_log, stderr=log,
+            env=qemu_environment(),
         )
         try:
             deadline = time.monotonic() + 120
@@ -301,7 +307,7 @@ def test_uefi_physical_console_boots_in_five_gib(tmp_path):
         "-drive",
         f"file={esp},format=raw,if=none,id=esp",
         "-device",
-        "nvme,drive=esp,serial=test-esp,bootindex=1",
+        "virtio-blk-pci,drive=esp,serial=test-esp,bootindex=1",
         "-drive",
         f"file={disk},format=raw,if=none,id=recovery",
         *USB_RECOVERY,
@@ -317,23 +323,29 @@ def test_uefi_physical_console_boots_in_five_gib(tmp_path):
         assert b"unknown" not in response.lower(), response
 
     def type_keys(connection, text):
+        # QEMU keys are US positions; the RAM environment reads them with the
+        # fleet's German layout, where these characters sit on other keys.
         special = {
             " ": "spc",
-            "-": "minus",
-            "/": "slash",
-            ">": "shift-dot",
+            "-": "slash",
+            "/": "shift-7",
+            ">": "shift-less",
             "\n": "ret",
         }
+        swapped = str.maketrans("yzYZ", "zyZY")
         for character in text:
+            position = character.translate(swapped)
             key = special.get(
                 character,
-                "shift-" + character.lower() if character.isupper() else character,
+                "shift-" + position.lower() if position.isupper() else position,
             )
             request(connection, "sendkey " + key + " 1")
             time.sleep(0.01)
 
     with (tmp_path / "qemu.log").open("w") as log:
-        process = subprocess.Popen(command, stdout=log, stderr=log)
+        process = subprocess.Popen(
+            command, stdout=log, stderr=log, env=qemu_environment()
+        )
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
                 connection.settimeout(30)

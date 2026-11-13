@@ -18,6 +18,7 @@ commands:
     operator_confirmation_required: true
     usage: devenv shell migration-boot discover [<host>] [--controller-cidr <ipv4/prefix>] [--format command]; devenv shell migration-boot build <host> --settings <settings.yml> --output <new-directory> [--boot-trust local-console|secure-boot] [--sign]
     local_staging: devenv shell migration-boot stage [<host>] [--bundle <directory>] [--allow-unverified-boot] [--apply]
+    guided_staging: devenv shell migration-boot prepare [<host>] --allow-unverified-boot [--controller-cidr <ipv4/32>] [--settings <settings.yml>] [--apply]
     remote_start: devenv shell migration-boot kexec [<host>] [--controller-cidr <ipv4/32>] [--settings <settings.yml>] [--bundle <directory>] [--apply]
     implementation: lx_administration/storage/migration_boot.py
     documentation: docs/migration-environment.md
@@ -29,6 +30,7 @@ commands:
       - Builds a small UKI verifying a separate RAM runtime; local-console is the default, with physical approval before access.
       - Signing decrypts controller custody only in the existing protected RAM workspace.
       - Local staging discovers the bundle and digest, requests sudo with explicit paths, and reuses the same host, payload and mount checks; missing inputs fail.
+      - prepare builds fresh console-approved artifacts from the clean reviewed checkout, discovers or reuses plan settings, and delegates to local staging; only --apply arms the next boot, and reboot remains explicit.
       - kexec builds the host-kexec RAM environment, pins a new SSH host key and prints its fingerprint; --apply with a typed phrase loads it and switches through systemctl kexec without a reboot.
   - id: stage-migration-boot
     summary: Verify and optionally arm a one-shot RAM boot on exactly one inventory host.

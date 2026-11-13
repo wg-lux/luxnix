@@ -537,7 +537,11 @@ def encrypted_findings(spec: dict, seen: dict) -> list[Finding]:
                 "This generation requires encrypted root, but "
                 f"{target['partition']} contains "
                 f"{actual or 'an unidentified signature'}. "
-                "A rebuild cannot encrypt a disk and this generation would not boot.",
+                "A rebuild cannot encrypt a disk and this generation would not boot. "
+                "For an existing plaintext installation, complete "
+                "`devenv shell luxnix migrate` from the reviewed checkout on this host "
+                "before rebuilding; see docs/boot-storage-quickstart.md. "
+                "Changing the account password does not encrypt root.",
             )
         ]
     luks = seen["luks"]

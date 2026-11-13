@@ -46,6 +46,8 @@ workflows:
     behavior: Preserve existing data with the established in-place conversion and recovery journal.
     prerequisites: Existing recovery, backup, identity preservation and acceptance requirements remain applicable.
     multidisk: Encrypt independent Btrfs partitions in place; preserve filesystem identities and source containers, with data keys on encrypted root.
+    ram_start: devenv shell migration-boot prepare --allow-unverified-boot
+    ram_start_apply: Repeat with --apply, reboot and approve at the physical console; then run luxnix-migration run --apply.
     excludes: MD arrays and multi-member Btrfs conversion.
 remote_unlock:
   laptop_guide: docs/remote-unlock-laptop.md

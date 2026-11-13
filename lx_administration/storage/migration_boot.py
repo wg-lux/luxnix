@@ -596,6 +596,35 @@ def build(args) -> None:
     )
 
 
+def prepare(args) -> None:
+    """Build fresh reviewed artifacts, then preview or arm their firmware entry."""
+    host = socket.gethostname().split(".")[0]
+    if args.host not in (None, host):
+        raise ValueError("Run this on the target host itself")
+    args.host = host
+    if not args.allow_unverified_boot:
+        raise ValueError(
+            "Console-approved boot requires --allow-unverified-boot; "
+            "for firmware-authenticated boot use build --boot-trust secure-boot --sign"
+        )
+    directory = Path.home() / ".local/state/luxnix/migration-boot" / host
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # Never select an older ~/migration-<host> bundle, even on a repeated run.
+    args.output = Path(tempfile.mkdtemp(prefix="build-", dir=directory)) / "bundle"
+    args.boot_trust, args.console, args.sign = "local-console", "tty1", False
+    build(args)
+    args.bundle = args.output
+    args.image = args.payload = args.sha256 = None
+    local_stage(args)
+    if args.apply:
+        print(
+            "One-shot migration boot armed. Reboot when ready, approve BOOT UNVERIFIED "
+            "at the target's screen, then run luxnix-migration run --apply."
+        )
+    else:
+        print("Verified; no boot state changed. Repeat prepare with --apply to arm.")
+
+
 def loader_variable(name: str) -> str | None:
     path = sb.EFIVARS / f"{name}-{LOADER_GUID}"
     if not path.exists():
@@ -1319,6 +1348,22 @@ def main(argv=None) -> None:
     target.add_argument("--esp", type=Path, default=Path("/boot"))
     target.add_argument("--apply", action="store_true")
     target.add_argument("--allow-unverified-boot", action="store_true")
+    preparation = commands.add_parser(
+        "prepare",
+        help="Build a fresh console-approved image and verify or arm its one-shot boot",
+    )
+    preparation.add_argument("host", nargs="?", help="Defaults to the local hostname")
+    preparation.add_argument("--flake", type=Path, default=sb.ROOT)
+    preparation.add_argument("--settings", type=Path)
+    for option in BUILD_SETTINGS:
+        preparation.add_argument("--" + option.replace("_", "-"), dest=option)
+    preparation.add_argument("--recovery", type=Path, default=Path("/recovery"))
+    preparation.add_argument("--esp", type=Path, default=Path("/boot"))
+    preparation.add_argument(
+        "--certificate", type=Path, default=sb.ROOT / "conf/secure-boot/db.pem"
+    )
+    preparation.add_argument("--allow-unverified-boot", action="store_true")
+    preparation.add_argument("--apply", action="store_true")
     starter = commands.add_parser(
         "kexec", help="Build, then start the RAM environment without a reboot"
     )
@@ -1338,6 +1383,7 @@ def main(argv=None) -> None:
         {
             "discover": discover,
             "build": build,
+            "prepare": prepare,
             "stage": local_stage,
             "admit": admit,
             "kexec": kexec,

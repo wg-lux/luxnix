@@ -21,7 +21,7 @@ entrypoints:
     purpose: Package pinned closure, Disko script, public hardware plan and Python runtime without credentials.
   - name: migration-boot
     file: migration_boot.py
-    purpose: Discover reusable build settings and local bundles, build and admit host-bound RAM images with firmware trust or physical console approval; stage an explicit one-shot boot without rebooting or encrypting; hold the boot default on the migration entry during conversion and hand it to the installed encrypted generation; build and start the RAM environment without a reboot (kexec) with a pinned SSH host key.
+    purpose: Discover reusable build settings; prepare fresh console-approved images and verify or arm their one-shot firmware boot in one command; admit signed or console-approved bundles without rebooting or encrypting; hold the migration default during conversion and hand it to the encrypted generation; retain optional kexec with a pinned SSH host key.
   - name: credential-backup
     file: credential_backup.py
     purpose: Authenticated credential archives with stable media identity, preserved account sources and explicit drift rejection.
