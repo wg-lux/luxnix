@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import shlex
+import sys
 
 import pytest
 
@@ -316,3 +317,99 @@ def test_force_marker_bypasses_valid_cache_and_survives_failure(
     assert (tmp_path / "observed").exists() == forced
     assert marker.exists() == (forced and failed)
     assert issue.count('if [ "$force_reissue" = 0 ]') == 4
+
+
+@pytest.fixture(scope="module", params=["gc-02", "gc-05"])
+def managed_hub_fetch(request):
+    host = request.param
+    script = eval_host(
+        host, "roles.managed-secrets.customSecrets.lx_hub_source_node_secret.generator"
+    )
+    return script, eval_host(host, "luxnix.vault.client.allowOffline")
+
+
+@pytest.mark.parametrize("mode", ["ok", "denied", "sealed", "unreachable"])
+def test_managed_hub_fetch_refreshes_boot_token(tmp_path, managed_hub_fetch, mode):
+    script, offline = managed_hub_fetch
+    words = shlex.split(script)
+    cli = tmp_path / "vault"
+    cli.write_text(
+        f"#!{sys.executable}\n"
+        + """
+import json, os, sys
+with open(os.environ['TEST_CALLS'], 'a') as log:
+    log.write(sys.argv[1] + '\\n')
+mode = os.environ['TEST_MODE']
+if sys.argv[1] == 'write':
+    assert not os.environ.get('VAULT_TOKEN')
+    assert json.load(sys.stdin) == {
+        'role_id': 'test-only-role', 'secret_id': 'test-only-secret'}
+    if mode != 'ok':
+        print({'denied': 'invalid role or secret ID', 'sealed': 'Vault is sealed',
+               'unreachable': 'dial tcp: connection refused'}[mode], file=sys.stderr)
+        sys.exit(2)
+    print('test-only-fresh')
+else:
+    assert sys.argv[1:3] == ['kv', 'get']
+    if os.environ.get('VAULT_TOKEN') != 'test-only-fresh':
+        print('permission denied', file=sys.stderr)
+        sys.exit(2)
+    print(json.dumps({'data': {'data': {'shared_secret': 'test-only-value'},
+                              'metadata': {'version': 1}}}))
+"""
+    )
+    cli.chmod(0o700)
+    script = script.replace(words[words.index("--cli") + 1], str(cli))
+    script = script.replace(
+        words[words.index("--state-dir") + 1], str(tmp_path / "state")
+    )
+    for name, content in (("role", "test-only-role"), ("secret", "test-only-secret")):
+        path = tmp_path / name
+        path.write_text(content + "\n")
+        field = "role_id" if name == "role" else "secret_id"
+        script = script.replace(
+            f"/etc/secrets/vault/hub-pki/approle_{field}", str(path)
+        )
+    target = tmp_path / "target"
+    target.touch(mode=0o600)
+    previous = tmp_path / "previous"
+    previous.write_text("test-only-accepted")
+    result = subprocess.run(
+        [
+            "bash",
+            "-euo",
+            "pipefail",
+            "-c",
+            f'vault() {{ {shlex.quote(str(cli))} "$@"; }};\n' + script,
+        ],
+        env=dict(
+            {
+                key: value
+                for key, value in os.environ.items()
+                if key != "LD_LIBRARY_PATH"
+            },
+            VAULT_TOKEN="test-only-expired",
+            TARGET_FILE=str(target),
+            SECRET_FILE=str(previous),
+            TEST_MODE=mode,
+            TEST_CALLS=str(tmp_path / "calls"),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    success = mode == "ok" or (offline and mode in ("sealed", "unreachable"))
+    assert (result.returncode == 0) == success, result.stderr
+    assert (tmp_path / "calls").read_text().splitlines()[0] == "write"
+    assert previous.read_text() == "test-only-accepted"
+    expected = (
+        "test-only-value" if mode == "ok" else "test-only-accepted" if success else ""
+    )
+    assert target.read_text() == expected
+    for sensitive in (
+        "test-only-secret",
+        "test-only-fresh",
+        "test-only-value",
+        "test-only-expired",
+    ):
+        assert sensitive not in result.stdout + result.stderr

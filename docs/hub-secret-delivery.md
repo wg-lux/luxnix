@@ -132,6 +132,15 @@ an outage. Outage tolerance also does not make the hub highly available; the
 OpenBao hub is a single node that needs its unseal ceremony after every
 restart. Managed TLS leaf renewal reloads it without a restart.
 
+Managed-secret generators authenticate afresh through the same AppRole helper
+as periodic delivery. They do not reuse the boot-time token, which can expire
+before an application upgrade or service restart. A rejected identity still
+fails closed; only sealed or unreachable hub states may reuse an existing
+value when `allowOffline` permits it. No credentials or key identities are
+replaced by this refresh. For an already stopped host, restart the reviewed
+managed-secrets unit and then the application startup chain after deploying the
+fix; a still-rejected fresh login requires the enrollment recovery workflow.
+
 ## Switching the hub to OpenBao
 
 `vault.backend` selects the product for the hub server, every hub tool and

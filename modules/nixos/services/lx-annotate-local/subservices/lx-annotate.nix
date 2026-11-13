@@ -16,9 +16,11 @@ with ctx;
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits
     ++ managedSecretsSetupUnits;
+    # Hard gates only: runtime, secrets and the master-key check (which itself
+    # requires migrations). Base-data loading is wanted and ordered first, but
+    # its failure leaves that unit failed without blocking the web service.
     requires = [
       "lx-annotate-runtime-env.service"
-      "lx-annotate-load-base-data.service"
       "lx-annotate-master-key-check.service"
     ]
     ++ dataRecoveryServiceUnits

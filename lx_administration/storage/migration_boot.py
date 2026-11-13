@@ -1379,6 +1379,9 @@ def main(argv=None) -> None:
     admission.add_argument("--spec", type=Path, required=True)
     admission.add_argument("--certificate", type=Path, required=True)
     args = parser.parse_args(argv)
+    # The Python wrapper can inject libraries newer than the installed bootctl.
+    # Nix tools must resolve their own closure, including after sudo re-exec.
+    os.environ.pop("LD_LIBRARY_PATH", None)
     try:
         {
             "discover": discover,

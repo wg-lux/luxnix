@@ -63,9 +63,45 @@ let
       ++ lib.optional stripNewlines "--strip-newlines"
       ++ lib.optional emptyWhenUnavailable "--empty-when-unavailable"
     );
+  refreshHubSecretAuth = optionalString (cfg.client.auth.method == "approle") ''
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.jq
+        pkgs.getent
+        vaultCli
+      ]
+    }:"$PATH"
+    unset VAULT_SKIP_VERIFY VAULT_TLS_SERVER_NAME VAULT_AGENT_ADDR VAULT_AUTH_STATE
+    ${optionalString (cfg.client.address != null) ''
+      export VAULT_ADDR=${lib.escapeShellArg cfg.client.address}
+    ''}
+    ${optionalString (cfg.client.caCertFile != null) ''
+      export VAULT_CACERT=${lib.escapeShellArg (toString cfg.client.caCertFile)}
+    ''}
+    ROLE_ID_FILE=${lib.escapeShellArg (toString cfg.client.auth.roleIdFile)}
+    SECRET_ID_FILE=${lib.escapeShellArg (toString cfg.client.auth.secretIdFile)}
+    ${optionalString cfg.client.auth.deferUntilProvisioned ''
+      if [ ! -s "$ROLE_ID_FILE" ] || [ ! -s "$SECRET_ID_FILE" ]; then
+        echo "Hub enrollment is pending; no hub secrets are fetched yet."
+        exit 0
+      fi
+    ''}
+    VAULT_AUTH_ERROR_CLASSIFIER=${vaultAuthErrorClassifierTool}/bin/luxnix-vault-classify-auth-error
+    source ${../../../../../scripts/vault/refresh-client-auth.sh}
+    if ! refresh_client_auth; then
+      case "''${VAULT_AUTH_STATE:-}" in
+        vault-unreachable|vault-sealed) ;;
+        *) echo "ERROR: the hub rejected this host; deployed secrets are left untouched." >&2; exit 1 ;;
+      esac
+    fi
+  '';
+
   # managed-secrets generator body: fills $TARGET_FILE, $SECRET_FILE is the deployed copy.
-  hubSecretFetch =
-    args: ''${hubSecretHelperArgs args} --target "$TARGET_FILE" --previous "$SECRET_FILE"'';
+  hubSecretFetch = args: ''
+    ${refreshHubSecretAuth}
+    ${hubSecretHelperArgs args} --target "$TARGET_FILE" --previous "$SECRET_FILE"
+  '';
 
   hubSecretsDeliverScript = pkgs.writeShellScript "luxnix-hub-secrets-deliver" ''
     set -euo pipefail
@@ -82,24 +118,7 @@ let
     ''}
 
     # Every run authenticates afresh: the boot-time token expires long before the next refresh.
-    ${optionalString (cfg.client.auth.method == "approle") ''
-      ROLE_ID_FILE=${lib.escapeShellArg (toString cfg.client.auth.roleIdFile)}
-      SECRET_ID_FILE=${lib.escapeShellArg (toString cfg.client.auth.secretIdFile)}
-      ${optionalString cfg.client.auth.deferUntilProvisioned ''
-        if [ ! -s "$ROLE_ID_FILE" ] || [ ! -s "$SECRET_ID_FILE" ]; then
-          echo "Hub enrollment is pending; no hub secrets are fetched yet."
-          exit 0
-        fi
-      ''}
-      VAULT_AUTH_ERROR_CLASSIFIER=${vaultAuthErrorClassifierTool}/bin/luxnix-vault-classify-auth-error
-      source ${../../../../../scripts/vault/refresh-client-auth.sh}
-      if ! refresh_client_auth; then
-        case "''${VAULT_AUTH_STATE:-}" in
-          vault-unreachable|vault-sealed) ;;
-          *) echo "ERROR: the hub rejected this host; deployed secrets are left untouched." >&2; exit 1 ;;
-        esac
-      fi
-    ''}
+    ${refreshHubSecretAuth}
     ${optionalString (cfg.client.auth.method == "tokenFile") ''
       TOKEN_FILE=${lib.escapeShellArg (toString cfg.client.auth.tokenFile)}
       ${optionalString cfg.client.auth.deferUntilProvisioned ''

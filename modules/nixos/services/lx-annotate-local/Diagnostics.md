@@ -129,6 +129,28 @@ fails, repair and restart the wheel-runtime unit before retrying
 `lx-annotate-migrate.service`; do not run `pip` concurrently with application
 units.
 
+### Start gates and non-blocking preparation
+
+Only these units are hard start gates (`Requires=`) for `lx-annotate.service`,
+Celery beat and the always-on Celery workers: encrypted storage and managed
+secrets, `lx-annotate-runtime-env`, the wheel runtime, `lx-dtypes-kb-bootstrap`
+(web and migrations), `lx-annotate-migrate` (through the key gate) and
+`lx-annotate-master-key-check`. A failure there keeps the application down on
+purpose: it would otherwise run on an unmigrated schema or an unverified key.
+
+`lx-annotate-load-base-data.service` is ordered before those units and pulled
+in with them, but it is not a start gate. If the load fails, for example on a
+malformed terminology value, the unit stays `failed` and visible while the web
+service and workers start on the reference data already in the database.
+Intake and maintenance jobs (file watcher, SAP import, preflight, storage
+migration, hub node provisioning) still require a successful load. After
+correcting the data, rerun it:
+
+```bash
+sudo systemctl restart lx-annotate-load-base-data.service
+sudo journalctl --namespace=lx-annotate -b --no-pager | grep -A4 CommandError
+```
+
 ### Start retry after a failed boot dependency
 
 systemd does not re-queue a start job that was cancelled with `Dependency

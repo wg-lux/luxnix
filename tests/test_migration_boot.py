@@ -18,6 +18,30 @@ from lx_administration.yaml import load_unique_yaml_file
 RECOVERY_UUID = "11111111-2222-4222-8222-222222222222"
 
 
+@pytest.mark.parametrize("command,handler", [
+    (["stage"], "local_stage"),
+    (["prepare", "--allow-unverified-boot"], "prepare"),
+    (["kexec"], "kexec"),
+])
+def test_migration_tools_do_not_inherit_python_library_overrides(
+    tmp_path, monkeypatch, command, handler
+):
+    tool = tmp_path / "bootctl"
+    tool.write_text(
+        f"#!{shutil.which('sh')}\n"
+        'printf "%s\\n" "${LD_LIBRARY_PATH-unset}" "$SSH_CONNECTION" "$PATH"\n'
+    )
+    tool.chmod(0o700)
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/foreign/python/libraries")
+    session = "192.0.2.1 12345 192.0.2.10 22"
+    monkeypatch.setenv("SSH_CONNECTION", session)
+    path = os.environ["PATH"]
+    result = []
+    monkeypatch.setattr(boot, handler, lambda args: result.append(boot.sb.run(tool)))
+    boot.main(command)
+    assert result == [f"unset\n{session}\n{path}\n"]
+
+
 @pytest.fixture
 def spec():
     return {

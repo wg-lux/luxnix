@@ -881,7 +881,10 @@ def test_lx_annotate_master_key_check_blocks_boot() -> None:
     assert service_config["ExecStart"].endswith("/bin/runLocalMasterKeyCheck")
     assert "/var/lib/lx-annotate/data" in service_config["ReadWritePaths"]
     assert "lx-annotate-load-base-data.service" in evaluated["after"]
-    assert "lx-annotate-load-base-data.service" in evaluated["requires"]
+    # A failed base-data load must not block the key gate or the application.
+    assert "lx-annotate-load-base-data.service" not in evaluated["requires"]
+    assert "lx-annotate-migrate.service" in evaluated["requires"]
+    assert "lx-annotate-migrate.service" in evaluated["after"]
     assert "lx-annotate-master-key-check.service" in evaluated["bootAfter"]
     assert "lx-annotate-master-key-check.service" in evaluated["bootRequires"]
 
@@ -1112,7 +1115,7 @@ def test_wheel_migrate_and_load_base_data_services_run_before_web() -> None:
         "lx-annotate-load-base-data-service" in evaluated["loadBaseData"]["ExecStart"]
     )
     assert "lx-annotate-load-base-data.service" in evaluated["bootAfter"]
-    assert "lx-annotate-load-base-data.service" in evaluated["bootRequires"]
+    assert "lx-annotate-load-base-data.service" not in evaluated["bootRequires"]
     assert "lx-annotate-data-recovery.service" not in evaluated["bootRequires"]
 
 

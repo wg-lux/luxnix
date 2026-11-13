@@ -10,6 +10,7 @@ with ctx;
     after = [
       "systemd-tmpfiles-setup.service"
       "lx-annotate-runtime-env.service"
+      "lx-annotate-migrate.service"
       "lx-annotate-load-base-data.service"
     ]
     ++ localPostgresServiceUnits
@@ -20,9 +21,12 @@ with ctx;
     ]
     ++ localPostgresServiceUnits
     ++ managedSecretsSetupUnits;
+    # verify_encrypted_storage needs the migrated schema, not reference data.
+    # Base-data loading stays ordered first (wants/after) but a failed load must
+    # not keep the key gate, and with it the whole application, down.
     requires = [
       "lx-annotate-runtime-env.service"
-      "lx-annotate-load-base-data.service"
+      "lx-annotate-migrate.service"
     ]
     ++ managedSecretsSetupUnits;
     restartTriggers = [ effectiveRuntimePackage ];

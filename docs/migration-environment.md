@@ -438,6 +438,17 @@ uses that target's saved receipt. No command here authorizes storage migration.
 
 ## Start without a reboot (remote)
 
+Run `devenv shell migration-boot ...` as the normal administrator, without a
+leading `sudo`. The helper requests sudo for the privileged steps. `sudo devenv`
+can fail before the helper starts with a Nix store remount or mount-namespace
+error; this is not a failure of kexec itself.
+
+If staging reports a `bootctl` error mentioning `GLIBC_ABI_GNU2_TLS` or a missing
+`GLIBC_...` version, the Python development environment supplied incompatible
+libraries to the installed tool. The migration launcher clears `LD_LIBRARY_PATH`
+after Python starts, including after its sudo re-exec. Update to the corrected
+source and retry the staging preview before arming a boot.
+
 For remote work, build and start the RAM environment directly from the running
 host, with no reboot, boot entry or console. Over your existing SSH session, from
 the devenv shell on the **target host**:

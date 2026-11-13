@@ -28,10 +28,10 @@ def test_diagnostic_preflight_does_not_block_web_and_always_on_workers() -> None
             inherit (cfg.systemd.services.lx-annotate-preflight) before requires wantedBy;
           };
           web = {
-            inherit (cfg.systemd.services.lx-annotate) requires;
+            inherit (cfg.systemd.services.lx-annotate) requires after;
           };
           workers = builtins.map
-            (name: { inherit (cfg.systemd.services.${name}) requires; })
+            (name: { inherit (cfg.systemd.services.${name}) requires after; })
             [
               "lx-annotate-celery-worker"
               "lx-annotate-celery-pipeline-worker"
@@ -51,7 +51,9 @@ def test_diagnostic_preflight_does_not_block_web_and_always_on_workers() -> None
         assert "lx-annotate-preflight.service" not in service["requires"]
         assert "lx-annotate-data-recovery.service" not in service["requires"]
         assert "lx-annotate-master-key-check.service" in service["requires"]
-        assert "lx-annotate-load-base-data.service" in service["requires"]
+        # Ordered and wanted, but not a start gate for the long-running units.
+        assert "lx-annotate-load-base-data.service" not in service["requires"]
+        assert "lx-annotate-load-base-data.service" in service["after"]
 
 
 def test_live_acceptance_requires_preflight_web_nginx_and_workers() -> None:

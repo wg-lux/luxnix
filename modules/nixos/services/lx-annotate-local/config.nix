@@ -1114,8 +1114,9 @@ let
         "lx-annotate-load-base-data.service"
       ]
       ++ workerCfg.wants;
+      # Base-data loading is ordered first but is not a start gate; see
+      # subservices/lx-annotate.nix.
       requires = [
-        "lx-annotate-load-base-data.service"
         "lx-annotate-master-key-check.service"
       ]
       ++ workerCfg.requires;
@@ -1141,9 +1142,11 @@ let
       "lx-annotate-load-base-data.service"
       "lx-annotate-master-key-check.service"
     ];
-    wants = [ "network-online.target" ];
-    requires = [
+    wants = [
+      "network-online.target"
       "lx-annotate-load-base-data.service"
+    ];
+    requires = [
       "lx-annotate-master-key-check.service"
     ];
     serviceConfig = {
